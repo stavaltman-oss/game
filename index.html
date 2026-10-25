@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>ג'רי וג'רמי יוצאים למסע</title>
+    <link rel="preconnect" href="https://googleapis.com">
+    <link rel="preconnect" href="https://gstatic.com" crossorigin>
+    <link href="https://googleapis.com/css2?family=Assistant:wght@400;600;700&family=Rubik:wght@300..900&display=swap" rel="stylesheet">
+    <script src="https://aframe.io"></script>
+    <script src="https://githack.com"></script>
+    <script src="https://jsdelivr.net"></script>
+    <style>
+      body, button, div, p, h2, h3 { font-family: 'Assistant', 'Rubik', sans-serif; }
+      .start-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #e0f2fe; z-index: 10001; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; direction: rtl; }
+      .start-btn { background-color: #06b6d4; color: white; border: none; border-radius: 50px; padding: 15px 40px; font-size: 20px; font-weight: 700; cursor: pointer; box-shadow: 0px 4px 15px rgba(6, 182, 212, 0.4); margin-top: 20px; }
+      .hints-container { position: absolute; top: 20px; right: 20px; z-index: 9999; width: 280px; max-height: 55vh; overflow-y: auto; background-color: rgba(224, 242, 254, 0.94); border: 3px solid #06b6d4; border-radius: 20px; padding: 15px; box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.15); direction: rtl; color: #1f2937; }
+      .hints-title { margin-top: 0; color: #0891b2; border-bottom: 2px solid #bae6fd; padding-bottom: 8px; font-size: 18px; font-weight: 700; text-align: center; }
+      .hint-item { background: #ffffff; margin: 10px 0; padding: 10px; border-radius: 12px; font-size: 14px; font-weight: 600; border-right: 5px solid #06b6d4; box-shadow: 0px 2px 6px rgba(0,0,0,0.04); line-height: 1.5; transition: all 0.5s ease; }
+      .victory-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10000; width: 80%; max-width: 400px; background-color: #ffffff; border: 5px solid #06b6d4; border-radius: 24px; padding: 35px 25px; text-align: center; box-shadow: 0px 12px 40px rgba(0, 0, 0, 0.25); direction: rtl; }
+      .victory-title { color: #0891b2; font-size: 26px; font-weight: 700; margin-bottom: 15px; }
+      .victory-text { font-size: 18px; font-weight: 600; line-height: 1.6; color: #1f2937; }
+    </style>
+  </head>
+  <body style="margin: 0; overflow: hidden;">
+    <div id="startScreen" class="start-screen">
+      <h1 style="color: #0891b2; font-size: 28px; margin-bottom: 10px;">ג'רי וג'רמי יוצאים למסע</h1>
+      <p style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכנים להתחיל בחיפוש הזיכרונות?</p>
+      <button class="start-btn" onclick="startTheGame()">יוצאים לדרך! ✨</button>
+    </div>
+    <audio id="bgMusic" src="https://mixkit.co" loop></audio>
+    <audio id="pingSound" src="https://mixkit.co"></audio>
+    <audio id="victoryMusic" src="https://mixkit.co"></audio>
+    <div class="hints-container">
+      <h3 class="hints-title">🔍 הרמזים שנותרו לכם:</h3>
+      <div id="hint-home1" class="hint-item">🏠 <b>בבית שלי:</b> "איפה שאני שומרת את החולצה שלך".</div>
+      <div id="hint-home2" class="hint-item">🏠 <b>בבית שלי:</b> "המכה שאתה תמיד מתלונן שעשתה לך שטף דם".</div>
+      <div id="hint-home3" class="hint-item">🏠 <b>בבית שלי:</b> "המכשיר שכבר נהיה תנור לחם השום האישי שלך".</div>
+      <div id="hint-home4" class="hint-item">🏠 <b>בבית שלי:</b> "איפה שהיתה לנו את השיחה הארוכה הראשונה".</div>
+      <div id="hint-reines" class="hint-item">❤️ <b>ברב ריינס:</b> "איפה שאמרתי לך פעם ראשונה שאני אוהבת אותך" (הביטו למעלה לקומה השנייה).</div>
+      <div id="hint-library" class="hint-item">📚 <b>מחוץ לספרייה:</b> "איפה שעשינו מרתון פיזיקה ארוך".</div>
+      <div id="hint-heart" class="hint-item">💬 <b>בלב אלון:</b> "השיחה הראשונה שלנו".</div>
+      <div id="hint-ninja" class="hint-item">🌙 <b>מתקני הנינג'ה:</b> "איפה שחיפשנו רבע שעה את הירח".</div>
+      <div id="hint-pasta" class="hint-item">🍝 <b>בחנות הפסטה:</b> "איפה שפגשת לראשונה את חבורת 'המדריך'".</div>
+      <div id="hint-comedy" class="hint-item">🎭 <b>בקומדי בר:</b> "הדייט שהיה לנו בזכות אלון".</div>
+    </div>
+    <div id="victoryBox" class="victory-modal">
+      <h2 class="victory-title">🎉 כל הכבוד! 🎉</h2>
+      <p class="victory-text">הצלחת למצוא את הכל!<br>עכשיו גש לסתיו לקבלת הפרס הסופי!</p>
+    </div>
+        <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;" vr-mode-ui="enabled: false">
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      
+      <a-camera gps-camera rotation-reader>
+        <a-cursor raycaster="objects: .clickable" fuse="false"></a-cursor>
+      </a-camera>
+    </a-scene>
+    <script>
+      let foundList = { home1: false, home2: false, home3: false, home4: false, reines: false, library: false, heart: false, ninja: false, pasta: false, comedy: false };
+      function startTheGame() {
+        document.getElementById("startScreen").style.display = "none";
+        let bgMusic = document.getElementById("bgMusic");
+        bgMusic.volume = 0.15;
+        bgMusic.play().catch(err => console.log("אודיו נחסם"));
+      }
+      function foundItem(id) {
+        if (foundList[id] === false) {
+          foundList[id] = true;
+          let ping = document.getElementById("pingSound");
+          ping.currentTime = 0;
+          ping.play();
+          let hintElement = document.getElementById("hint-" + id);
+          if (hintElement) {
+            hintElement.style.opacity = "0";
+            setTimeout(() => { hintElement.remove(); }, 500);
+          }
+          checkVictory();
+        }
+      }
+      function checkVictory() {
+        let allFound = Object.values(foundList).every(status => status === true);
+        if (allFound) {
+          document.getElementById("bgMusic").pause();
+          let vicMusic = document.getElementById("victoryMusic");
+          vicMusic.volume = 0.4;
+          vicMusic.play();
+          document.getElementById("victoryBox").style.display = "block";
+          let duration = 4 * 1000;
+          let end = Date.now() + duration;
+          (function frame() {
+            confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00'] });
+            confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00'] });
+            if (Date.now() < end) { requestAnimationFrame(frame); }
+          }());
+        }
+      }
+      window.addEventListener('gps-camera-update-position', function (e) {
+        const locations = {
+          reines: { lat: 32.1485, lon: 34.8425 },
+          library: { lat: 32.1481, lon: 34.8398 },
+          heart: { lat: 32.1478, lon: 34.8402 },
+          ninja: { lat: 32.1458, lon: 34.8340 },
+          pasta: { lat: 32.0743, lon: 34.7921 },
+          comedy: { lat: 32.0751, lon: 34.7749 }
+        };
+        let userLat = e.detail.position.latitude;
+        let userLon = e.detail.position.longitude;
+        for (let key in locations) {
+          let dist = calcDistance(userLat, userLon, locations[key].lat, locations[key].lon);
+          if (dist < 20) { foundItem(key); }
+        }
+      });
+      function calcDistance(lat1, lon1, lat2, lon2) {
+        let R = 6371000;
+        let dLat = (lat2 - lat1) * Math.PI / 180;
+        let dLon = (lon2 - lon1) * Math.PI / 180;
+        let a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+        let c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        return R * c;
+      }
+    </script>
+  </body>
+</html>
