@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://gstatic.com" crossorigin>
     <link href="https://googleapis.com/css2?family=Assistant:wght@400;600;700&family=Rubik:wght@300..900&display=swap" rel="stylesheet">
 
-    <!-- טעינת מנועים ותוספי מציאות רבודה מעודכנים לאייפון -->
+    <!-- טעינת מנועים ותוספי מציאות רבודה מעודכנים ויציבים לנייד -->
     <script src="https://aframe.io"></script>
     <script src="https://githack.com"></script>
     
@@ -130,7 +130,7 @@
     <!-- מסך פתיחה חיוני להפעלת האודיו והמצלמה -->
     <div id="startScreen" class="start-screen">
       <h1 style="color: #0891b2; font-size: 28px; margin-bottom: 10px;">ג'רי וג'רמי יוצאים למסע</h1>
-      <p style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכנים להתחיל בחיפוש הזיכרונות?</p>
+      <p style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכן להתחיל בחיפוש הזיכרונות?</p>
       <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
     </div>
 
@@ -146,8 +146,8 @@
       <div id="hint-home2" class="hint-item"> <b></b> המכה שאתה תמיד מתלונן שעשתה לך שטף דם</div>
       <div id="hint-home3" class="hint-item"> <b></b> המכשיר שכבר נהיה תנור לחם השום האישי שלך</div>
       <div id="hint-home4" class="hint-item"> <b></b> איפה שהיתה לנו את השיחה הארוכה הראשונה</div>
-      <div id="hint-reines" class="hint-item"> <b></b> איפה שאמרתי לך פעם ראשונה שאני אוהבת אותך (הביטו למעלה לקומה השנייה).</div>
-      <div id="hint-library" class="hint-item"> <b>מחוץ לספרייה:</b> איפה שעשינו מרתון פיזיקה ארוך.</div>
+      <div id="hint-reines" class="hint-item"> <b></b> איפה שאמרתי לך פעם ראשונה שאני אוהבת אותך (הסתכל למעלה לקומה השנייה).</div>
+      <div id="hint-library" class="hint-item"> <b></b> איפה שעשינו מרתון פיזיקה ארוך</div>
       <div id="hint-heart" class="hint-item"> <b></b> השיחה הראשונה שלנו</div>
       <div id="hint-ninja" class="hint-item"> <b></b> איפה שחיפשנו רבע שעה את הירח</div>
       <div id="hint-pasta" class="hint-item"> <b></b> איפה שפגשת לראשונה את חבורת 'המדריך'</div>
@@ -159,16 +159,16 @@
       <h2 class="victory-title"> כל הכבוד! </h2>
       <p class="victory-text">הצלחת למצוא את הכל!<br>עכשיו גש לסתיו לקבלת הפרס הסופי!</p>
     </div>
-    <!-- מנוע ה-AR והצבת המודלים -->
+    <!-- מנוע ה-AR והצבת המודלים במרחב -->
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
       
-      <!-- מודלים בתוך הבית -->
+      <!-- מודלים בתוך הבית (מבוסס מרחק מטרים יחסי) -->
       
       
       
       
 
-      <!-- מיקומי GPS בחוץ -->
+      <!-- מיקומי GPS קבועים בחוץ -->
       
       
       
@@ -181,7 +181,7 @@
       </a-camera>
     </a-scene>
 
-    <!-- ניהול הלוגיקה, המוזיקה והקונפטי -->
+    <!-- מערכת ניהול הלוגיקה, המוזיקה והקונפטי -->
     <script>
       let foundList = {
         home1: false, home2: false, home3: false, home4: false,
@@ -192,7 +192,7 @@
         document.getElementById("startScreen").style.display = "none";
         let bgMusic = document.getElementById("bgMusic");
         bgMusic.volume = 0.15;
-        bgMusic.play().catch(err => console.log("אודיו נחסם"));
+        bgMusic.play().catch(err => console.log("אודיו חסום"));
       }
 
       function foundItem(id) {
@@ -284,4 +284,3 @@
     </script>
   </body>
 </html>
-
