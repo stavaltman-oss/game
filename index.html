@@ -2,18 +2,16 @@
 <html>
   <head>
     <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <title>ג'רי וג'רמי יוצאים למסע</title>
     <!-- טעינת הגופנים מגוגל פונטס -->
-    <link rel="preconnect" href="https://googleapis.com">
-    <link rel="preconnect" href="https://gstatic.com" crossorigin>
-    <link href="https://googleapis.com/css2?family=Assistant:wght@400;600;700&family=Rubik:wght@300..900&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Rubik:wght@300..900&display=swap" rel="stylesheet">
 
-    <!-- טעינת מנועים ותוספי מציאות רבודה מעודכנים ויציבים לנייד -->
-    <script src="https://aframe.io"></script>
-    <script src="https://githack.com"></script>
-    
+    <!-- A-Frame + AR.js נטענים בלחיצה על "צא לדרך" (נדרש להרשאת מצלמה ב-iOS) -->
     <!-- טעינת ספריית קונפטי לניצחון -->
-    <script src="https://jsdelivr.net"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
     <style>
       body, button, div, p, h2, h3 {
@@ -134,10 +132,10 @@
       <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
     </div>
 
-    <!-- נגני סאונד מובנים (שולפים צלילים חופשיים מהאינטרנט) -->
-    <audio id="bgMusic" src="https://mixkit.co" loop></audio>
-    <audio id="pingSound" src="https://mixkit.co"></audio>
-    <audio id="victoryMusic" src="https://mixkit.co"></audio>
+    <!-- קבצי אודיו מה-repo (תיקייה audio/ ליד index.html) -->
+    <audio id="bgMusic" src="audio/bg-music.mp3" loop preload="auto"></audio>
+    <audio id="pingSound" src="audio/ping.mp3" preload="auto"></audio>
+    <audio id="victoryMusic" src="audio/victory.mp3" preload="auto"></audio>
 
     <!-- תיבת הרמזים שמוצגת כל הזמן -->
     <div class="hints-container">
@@ -188,11 +186,46 @@
         reines: false, library: false, heart: false, ninja: false, pasta: false, comedy: false
       };
 
+      let arLibrariesLoaded = false;
+
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          if (document.querySelector('script[src="' + src + '"]')) {
+            resolve();
+            return;
+          }
+          var s = document.createElement("script");
+          s.src = src;
+          s.onload = resolve;
+          s.onerror = function () { reject(new Error("Failed to load: " + src)); };
+          document.head.appendChild(s);
+        });
+      }
+
+      function loadArLibraries() {
+        if (arLibrariesLoaded) {
+          return Promise.resolve();
+        }
+        return loadScript("https://aframe.io/releases/1.5.0/aframe.min.js")
+          .then(function () {
+            return loadScript("https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js");
+          })
+          .then(function () {
+            arLibrariesLoaded = true;
+          });
+      }
+
       function startTheGame() {
         document.getElementById("startScreen").style.display = "none";
-        let bgMusic = document.getElementById("bgMusic");
-        bgMusic.volume = 0.15;
-        bgMusic.play().catch(err => console.log("אודיו חסום"));
+        loadArLibraries()
+          .catch(function (err) {
+            console.error(err);
+            alert("לא הצלחנו לטעון את מנוע המציאות הרבודה. בדוק חיבור לאינטרנט ונסה שוב.");
+          })
+          .finally(function () {
+            var bgMusic = document.getElementById("bgMusic");
+            bgMusic.play().catch(function () { console.log("אודיו חסום"); });
+          });
       }
 
       function foundItem(id) {
