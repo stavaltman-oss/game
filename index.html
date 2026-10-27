@@ -177,6 +177,17 @@
       // מרחק (במטרים) שבו פריט חיצוני נאסף אוטומטית. 20 = כמו בקוד המקורי.
       const COLLECT_RADIUS = 20;
 
+      // סיבוב המודלים במקום סביב עצמם: זמן סיבוב מלא בשניות (0 = בלי סיבוב).
+      // אפשר לבטל סיבוב למודל מסוים עם spin: false בהגדרה שלו.
+      const SPIN_SECONDS = 10;
+
+      // יציבות מיקום: ה-GPS "רועד" בכמה מטרים גם כשעומדים במקום, והמודלים זזים איתו.
+      // בקרבת נקודת ההתחלה (הבית) המצלמה מתעדכנת רק אחרי תזוזה של HOME_MIN_MOVE מטר לפחות,
+      // ומחוץ לאזור הזה (בהליכה) אחרי WALK_MIN_MOVE מטר.
+      const HOME_RADIUS = 25;
+      const HOME_MIN_MOVE = 8;
+      const WALK_MIN_MOVE = 2;
+
       const PLACES = {
         // --- בתוך הבית: pos = "x y z" במטרים מנקודת ההתחלה שבה לחצת "צא לדרך".
         //     x = מזרחה (שלילי = מערבה), z = דרומה (שלילי = צפונה), y = גובה יחסית לגובה העיניים.
@@ -261,6 +272,62 @@
       // ============================================================
       //  בניית סצנת ה-AR והמודלים (אחרי שהספריות נטענו)
       // ============================================================
+      function entityHtml(id, placeAttr) {
+        const p = PLACES[id];
+        // אלמנט חיצוני = נקודת המיקום. אלמנט פנימי = המודל, שמותאם לגודל וממורכז אחרי הטעינה.
+        const spin = (SPIN_SECONDS > 0 && p.spin !== false)
+          ? ' animation="property: rotation; from: 0 0 0; to: 0 360 0; dur: ' + (SPIN_SECONDS * 1000) +
+            '; easing: linear; loop: true"'
+          : "";
+        // place = נקודת המיקום, spin = ציר הסיבוב (במרכז המודל), model = המודל עצמו
+        return '<a-entity id="place-' + id + '"' + placeAttr + '>' +
+               '<a-entity id="spin-' + id + '"' + spin + '>' +
+               '<a-entity id="model-' + id + '" class="clickable"' +
+               ' rotation="' + (p.rot || "0 0 0") + '"' +
+               ' gltf-model="url(' + MODEL_DIR + p.file + ')"></a-entity>' +
+               '</a-entity></a-entity>';
+      }
+
+      // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
+      function wireModel(id) {
+        const el = document.getElementById("model-" + id);
+        if (!el) return;
+        el.addEventListener("click", function () { foundItem(id); });
+        el.addEventListener("model-loaded", function () { fitModel(id, el); });
+        el.addEventListener("model-error", function () {
+          console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
+          el.removeAttribute("gltf-model");
+          el.setAttribute("geometry", "primitive: sphere; radius: 0.4");
+          el.setAttribute("material", "color: #06b6d4; opacity: 0.85");
+          const fb = PLACES[id].size / 2 / 0.4;
+          el.setAttribute("scale", fb + " " + fb + " " + fb);
+        });
+      }
+
+      // מודלי הבית: כשיש GPS, מצלמת AR.js "קופצת" לקואורדינטות העולם של המיקום האמיתי
+      // (מספרים של מיליוני מטרים), ולכן מיקום יחסי חייב להימדד ממיקום המצלמה ברגע הזה.
+      // לכן מודלי הבית נוצרים רק אחרי קבלת מיקום ראשון, ומוצבים ביחס אליו.
+      // אם אין GPS (חסום/איטי) הם מוצבים ביחס לראשית הצירים אחרי כמה שניות.
+      let indoorPlaced = false;
+      function placeIndoorModels(origin) {
+        if (indoorPlaced) return;
+        indoorPlaced = true;
+        const scene = document.getElementById("arScene");
+        if (!scene) return;
+        let html = "";
+        const ids = [];
+        for (let id in PLACES) {
+          const p = PLACES[id];
+          if (p.type !== "indoor" || foundList[id]) continue;
+          const off = p.pos.split(/\s+/).map(Number);
+          const pos = (origin.x + off[0]) + " " + (origin.y + off[1]) + " " + (origin.z + off[2]);
+          html += entityHtml(id, ' position="' + pos + '"');
+          ids.push(id);
+        }
+        scene.insertAdjacentHTML("beforeend", html);
+        ids.forEach(wireModel);
+      }
+
       function buildScene() {
         let camAttr = "gps-new-camera";
         if (SIM) {
@@ -269,20 +336,9 @@
 
         let entities = "";
         for (let id in PLACES) {
-          if (foundList[id]) continue;
           const p = PLACES[id];
-          let placeAttr = "";
-          if (p.type === "gps") {
-            placeAttr = ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"';
-          } else {
-            placeAttr = ' position="' + p.pos + '"';
-          }
-          // אלמנט חיצוני = נקודת המיקום. אלמנט פנימי = המודל, שמותאם לגודל וממורכז אחרי הטעינה.
-          entities += '<a-entity id="place-' + id + '"' + placeAttr + '>' +
-                      '<a-entity id="model-' + id + '" class="clickable"' +
-                      ' rotation="' + (p.rot || "0 0 0") + '"' +
-                      ' gltf-model="url(' + MODEL_DIR + p.file + ')"></a-entity>' +
-                      '</a-entity>';
+          if (p.type !== "gps" || foundList[id]) continue;
+          entities += entityHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
         }
 
         const html =
@@ -296,22 +352,21 @@
 
         document.body.insertAdjacentHTML("beforeend", html);
 
-        // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
         for (let id in PLACES) {
-          const el = document.getElementById("model-" + id);
-          if (!el) continue;
-          el.addEventListener("click", function () { foundItem(id); });
-          el.addEventListener("model-loaded", function () { fitModel(id, el); });
-          el.addEventListener("model-error", function () {
-            console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
-            el.removeAttribute("gltf-model");
-            el.setAttribute("geometry", "primitive: sphere; radius: 0.4");
-            el.setAttribute("material", "color: #06b6d4; opacity: 0.85");
-            const p = PLACES[id];
-            const fb = p.size / 2 / 0.4;
-            el.setAttribute("scale", fb + " " + fb + " " + fb);
-          });
+          if (PLACES[id].type === "gps") wireModel(id);
         }
+
+        const cam = document.querySelector("a-camera");
+        cam.addEventListener("gps-camera-update-position", function () {
+          const c = cam.object3D.position;
+          placeIndoorModels({ x: c.x, y: c.y, z: c.z });
+        });
+        setTimeout(function () {
+          if (!indoorPlaced) {
+            console.warn("אין מיקום GPS - מודלי הבית מוצבים ביחס לראשית הצירים");
+            placeIndoorModels({ x: 0, y: 0, z: 0 });
+          }
+        }, 10000);
       }
 
       // התאמת גודל ומרכוז של מודל אחרי שנטען
@@ -322,16 +377,22 @@
         const obj = el.getObject3D("mesh");
         if (!obj) return;
 
+        const spinEl = el.parentNode;                 // ציר הסיבוב
+        const placeEl = spinEl.parentNode;            // נקודת המיקום
+        const savedSpin = spinEl.object3D.rotation.y;
+        spinEl.object3D.rotation.y = 0;               // מודדים בזווית אפס, בלי קשר לסיבוב הרץ
+
         el.object3D.scale.set(1, 1, 1);
         el.object3D.position.set(0, 0, 0);
-        el.object3D.updateMatrixWorld(true);
+        placeEl.object3D.updateMatrixWorld(true);
 
         const box = new THREE.Box3().setFromObject(obj);
         const size = box.getSize(new THREE.Vector3());
         const center = box.getCenter(new THREE.Vector3());
-        const parentPos = new THREE.Vector3();
-        el.parentNode.object3D.getWorldPosition(parentPos);
-        center.sub(parentPos);
+        const placePos = new THREE.Vector3();
+        placeEl.object3D.getWorldPosition(placePos);
+        center.sub(placePos);
+        spinEl.object3D.rotation.y = savedSpin;
 
         const longest = Math.max(size.x, size.y, size.z);
         if (!isFinite(longest) || longest <= 0) return;
@@ -348,7 +409,18 @@
       // ============================================================
       //  מעקב מיקום ואיסוף אוטומטי של פריטי GPS
       // ============================================================
+      let homeFix = null;
+      function tuneGpsStability(lat, lon) {
+        if (!homeFix) homeFix = { lat: lat, lon: lon };
+        const cam = document.querySelector("a-camera");
+        const comp = cam && cam.components && cam.components["gps-new-camera"];
+        if (!comp || !comp.threeLoc) return;
+        const atHome = calcDistance(lat, lon, homeFix.lat, homeFix.lon) < HOME_RADIUS;
+        comp.threeLoc.setGpsOptions({ gpsMinDistance: atHome ? HOME_MIN_MOVE : WALK_MIN_MOVE });
+      }
+
       function onUserPosition(lat, lon, accuracy) {
+        tuneGpsStability(lat, lon);
         let debugLines = ["lat " + lat.toFixed(5) + "  lon " + lon.toFixed(5) + "  ±" + Math.round(accuracy) + "m"];
 
         for (let id in PLACES) {
