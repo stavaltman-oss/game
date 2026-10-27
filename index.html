@@ -132,10 +132,10 @@
       <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
     </div>
 
-    <!-- קבצי אודיו מה-repo (תיקייה audio/ ליד index.html) -->
-    <audio id="bgMusic" src="audio/bg-music.mp3" loop preload="auto"></audio>
-    <audio id="pingSound" src="audio/ping.mp3" preload="auto"></audio>
-    <audio id="victoryMusic" src="audio/victory.mp3" preload="auto"></audio>
+    <!-- קבצי אודיו מה-repo (ישירות ליד index.html, בלי תיקיות) -->
+    <audio id="bgMusic" src="bg-music.mp3" loop preload="auto"></audio>
+    <audio id="pingSound" src="ping.mp3" preload="auto"></audio>
+    <audio id="victoryMusic" src="victory.mp3" preload="auto"></audio>
 
     <!-- תיבת הרמזים שמוצגת כל הזמן -->
     <div class="hints-container">
@@ -157,27 +157,7 @@
       <h2 class="victory-title"> כל הכבוד! </h2>
       <p class="victory-text">הצלחת למצוא את הכל!<br>עכשיו גש לסתיו לקבלת הפרס הסופי!</p>
     </div>
-    <!-- מנוע ה-AR והצבת המודלים במרחב -->
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-      
-      <!-- מודלים בתוך הבית (מבוסס מרחק מטרים יחסי) -->
-      
-      
-      
-      
-
-      <!-- מיקומי GPS קבועים בחוץ -->
-      
-      
-      
-      
-      
-      
-
-      <a-camera gps-camera rotation-reader>
-        <a-cursor raycaster="objects: .clickable" fuse="false"></a-cursor>
-      </a-camera>
-    </a-scene>
+    <!-- מנוע ה-AR והמודלים נבנים בקוד (buildScene) אחרי שהספריות נטענו, בלחיצה על "צא לדרך" -->
 
     <!-- מערכת ניהול הלוגיקה, המוזיקה והקונפטי -->
     <script>
@@ -186,45 +166,263 @@
         reines: false, library: false, heart: false, ninja: false, pasta: false, comedy: false
       };
 
+      // ============================================================
+      //  הגדרות המשחק - כאן מכווננים מיקומים, גדלים ושמות קבצים
+      // ============================================================
+
+      // מודלי ה-GLB נמצאים ישירות ליד index.html (בלי תיקייה). שם הקובץ של כל פריט = <id>.glb
+      // אם קראת לקבצים אחרת - שנה את שדה file של הפריט הרלוונטי.
+      const MODEL_DIR = "";
+
+      // מרחק (במטרים) שבו פריט חיצוני נאסף אוטומטית. 20 = כמו בקוד המקורי.
+      const COLLECT_RADIUS = 20;
+
+      const PLACES = {
+        // --- בתוך הבית: pos = "x y z" במטרים מנקודת ההתחלה שבה לחצת "צא לדרך".
+        //     x = מזרחה (שלילי = מערבה), z = דרומה (שלילי = צפונה), y = גובה יחסית לגובה העיניים.
+        //     אלה ערכי התחלה בלבד - עדכן אותם לפי הבית שלך.
+        // size = הגודל במטרים של הצלע הארוכה של המודל. המודלים מותאמים לגודל הזה אוטומטית
+        //        וממורכזים סביב הנקודה, כך שלא משנה באיזה קנה מידה יוצאו מהתוכנה.
+        // rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
+        home1: { type: "indoor", pos: "2 -0.5 -3",  size: 0.6, file: "home_loc1.glb" },
+        home2: { type: "indoor", pos: "-2 -0.5 -3", size: 0.6, file: "home_loc2.glb" },
+        home3: { type: "indoor", pos: "3 -0.5 -1",  size: 0.6, file: "home_loc3.glb" },
+        home4: { type: "indoor", pos: "-3 -0.5 -1", size: 0.6, file: "home_loc4.glb" },
+
+        // --- בחוץ: מיקומי GPS קבועים
+        reines:  { type: "gps", lat: 32.1485, lon: 34.8425, size: 3, file: "reines_36.glb" },
+        library: { type: "gps", lat: 32.1481, lon: 34.8398, size: 3, file: "alon_library.glb" },
+        heart:   { type: "gps", lat: 32.1478, lon: 34.8402, size: 3, file: "alon_heart.glb" },
+        ninja:   { type: "gps", lat: 32.1458, lon: 34.8340, size: 3, file: "park_ninja.glb" },
+        pasta:   { type: "gps", lat: 32.0743, lon: 34.7921, size: 3, file: "pasta_basta.glb" },
+        comedy:  { type: "gps", lat: 32.0751, lon: 34.7749, size: 3, rot: "90 0 0", file: "comedy_club.glb" }
+      };
+
+      // בדיקות במחשב: הוסף לכתובת  ?sim=32.1485,34.8425  כדי "לעמוד" בנקודה מסוימת
+      // והוסף  &debug=1  כדי לראות בפינה את המיקום והמרחקים לכל פריט.
+      const urlParams = new URLSearchParams(window.location.search);
+      const SIM = (function () {
+        const raw = urlParams.get("sim");
+        if (!raw) return null;
+        const parts = raw.split(",").map(Number);
+        return (parts.length === 2 && parts.every(isFinite)) ? { lat: parts[0], lon: parts[1] } : null;
+      })();
+      const DEBUG = urlParams.has("debug");
+
+      // ============================================================
+      //  טעינת הספריות (A-Frame 1.3.0 + AR.js מבוסס מיקום)
+      //  זה הצירוף שבדוגמה הרשמית של AR.js למיקום. נוסה מקור גיבוי אם הראשון נכשל.
+      // ============================================================
+      const AFRAME_SRC = "https://aframe.io/releases/1.3.0/aframe.min.js";
+      const AR_SETS = [
+        [
+          "https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex-location-only.js",
+          "https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"
+        ],
+        [
+          "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/three.js/build/ar-threex-location-only.js",
+          "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"
+        ]
+      ];
+
       let arLibrariesLoaded = false;
 
       function loadScript(src) {
         return new Promise(function (resolve, reject) {
-          if (document.querySelector('script[src="' + src + '"]')) {
-            resolve();
-            return;
-          }
           var s = document.createElement("script");
           s.src = src;
           s.onload = resolve;
-          s.onerror = function () { reject(new Error("Failed to load: " + src)); };
+          s.onerror = function () { s.remove(); reject(new Error("Failed to load: " + src)); };
           document.head.appendChild(s);
         });
+      }
+
+      function loadSequence(list) {
+        return list.reduce(function (p, src) {
+          return p.then(function () { return loadScript(src); });
+        }, Promise.resolve());
       }
 
       function loadArLibraries() {
         if (arLibrariesLoaded) {
           return Promise.resolve();
         }
-        return loadScript("https://aframe.io/releases/1.5.0/aframe.min.js")
+        return loadScript(AFRAME_SRC)
           .then(function () {
-            return loadScript("https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js");
+            return AR_SETS.reduce(function (p, set) {
+              return p.catch(function () { return loadSequence(set); });
+            }, Promise.reject());
           })
           .then(function () {
             arLibrariesLoaded = true;
           });
       }
 
+      // ============================================================
+      //  בניית סצנת ה-AR והמודלים (אחרי שהספריות נטענו)
+      // ============================================================
+      function buildScene() {
+        let camAttr = "gps-new-camera";
+        if (SIM) {
+          camAttr += '="simulateLatitude: ' + SIM.lat + '; simulateLongitude: ' + SIM.lon + '"';
+        }
+
+        let entities = "";
+        for (let id in PLACES) {
+          const p = PLACES[id];
+          let placeAttr = "";
+          if (p.type === "gps") {
+            placeAttr = ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"';
+          } else {
+            placeAttr = ' position="' + p.pos + '"';
+          }
+          // אלמנט חיצוני = נקודת המיקום. אלמנט פנימי = המודל, שמותאם לגודל וממורכז אחרי הטעינה.
+          entities += '<a-entity id="place-' + id + '"' + placeAttr + '>' +
+                      '<a-entity id="model-' + id + '" class="clickable"' +
+                      ' rotation="' + (p.rot || "0 0 0") + '"' +
+                      ' gltf-model="url(' + MODEL_DIR + p.file + ')"></a-entity>' +
+                      '</a-entity>';
+        }
+
+        const html =
+          '<a-scene id="arScene" vr-mode-ui="enabled: false" cursor="rayOrigin: mouse"' +
+          ' raycaster="near: 0; far: 50000; objects: .clickable"' +
+          ' arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"' +
+          ' renderer="antialias: true; alpha: true">' +
+          '<a-camera ' + camAttr + '></a-camera>' + entities +
+          '</a-scene>';
+
+        document.body.insertAdjacentHTML("beforeend", html);
+
+        // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
+        for (let id in PLACES) {
+          const el = document.getElementById("model-" + id);
+          el.addEventListener("click", function () { foundItem(id); });
+          el.addEventListener("model-loaded", function () { fitModel(id, el); });
+          el.addEventListener("model-error", function () {
+            console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
+            el.removeAttribute("gltf-model");
+            el.setAttribute("geometry", "primitive: sphere; radius: 0.4");
+            el.setAttribute("material", "color: #06b6d4; opacity: 0.85");
+            const p = PLACES[id];
+            const fb = p.size / 2 / 0.4;
+            el.setAttribute("scale", fb + " " + fb + " " + fb);
+          });
+        }
+      }
+
+      // התאמת גודל ומרכוז של מודל אחרי שנטען
+      const EYE_HEIGHT = 1.6;
+      function fitModel(id, el) {
+        const THREE = AFRAME.THREE;
+        const p = PLACES[id];
+        const obj = el.getObject3D("mesh");
+        if (!obj) return;
+
+        el.object3D.scale.set(1, 1, 1);
+        el.object3D.position.set(0, 0, 0);
+        el.object3D.updateMatrixWorld(true);
+
+        const box = new THREE.Box3().setFromObject(obj);
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const parentPos = new THREE.Vector3();
+        el.parentNode.object3D.getWorldPosition(parentPos);
+        center.sub(parentPos);
+
+        const longest = Math.max(size.x, size.y, size.z);
+        if (!isFinite(longest) || longest <= 0) return;
+        const s = p.size / longest;
+
+        el.object3D.scale.setScalar(s);
+        el.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
+        // פריטי GPS בחוץ: מרימים את המודל כך שיעמוד על הקרקע (מתחת לגובה העיניים)
+        if (p.type === "gps") {
+          el.object3D.position.y += p.size / 2 - EYE_HEIGHT;
+        }
+      }
+
+      // ============================================================
+      //  מעקב מיקום ואיסוף אוטומטי של פריטי GPS
+      // ============================================================
+      function onUserPosition(lat, lon, accuracy) {
+        let debugLines = ["lat " + lat.toFixed(5) + "  lon " + lon.toFixed(5) + "  ±" + Math.round(accuracy) + "m"];
+
+        for (let id in PLACES) {
+          const p = PLACES[id];
+          if (p.type !== "gps") continue;
+          const dist = calcDistance(lat, lon, p.lat, p.lon);
+          debugLines.push(id + (foundList[id] ? " ✓ " : "   ") + Math.round(dist) + "m");
+          if (dist < COLLECT_RADIUS) {
+            foundItem(id);
+          }
+        }
+
+        if (DEBUG) {
+          let box = document.getElementById("debugBox");
+          if (!box) {
+            box = document.createElement("div");
+            box.id = "debugBox";
+            box.style.cssText = "position:fixed;bottom:10px;left:10px;z-index:9998;background:rgba(0,0,0,0.7);" +
+              "color:#fff;font:12px monospace;padding:8px;border-radius:8px;direction:ltr;white-space:pre;";
+            document.body.appendChild(box);
+          }
+          box.textContent = debugLines.join("\n");
+        }
+      }
+
+      function startGpsWatch() {
+        if (SIM) {
+          onUserPosition(SIM.lat, SIM.lon, 0);
+          return;
+        }
+        if (!navigator.geolocation) return;
+        navigator.geolocation.watchPosition(
+          function (pos) { onUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
+          function (err) { console.warn("GPS error:", err.message); },
+          { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
+        );
+      }
+
+      // ============================================================
+      //  התחלת המשחק
+      //  חשוב: הרשאת חישני התנועה באייפון והפעלת האודיו חייבות להתבצע
+      //  ישירות בתוך הלחיצה, לפני כל המתנה לטעינה.
+      // ============================================================
+      function requestMotionPermission() {
+        if (typeof DeviceOrientationEvent !== "undefined" &&
+            typeof DeviceOrientationEvent.requestPermission === "function") {
+          return DeviceOrientationEvent.requestPermission().catch(function (e) { console.warn(e); });
+        }
+        return Promise.resolve();
+      }
+
+      function unlockAudio() {
+        document.getElementById("bgMusic").play().catch(function () { console.log("אודיו חסום"); });
+        ["pingSound", "victoryMusic"].forEach(function (id) {
+          const a = document.getElementById(id);
+          a.muted = true;
+          a.play().then(function () {
+            a.pause();
+            a.currentTime = 0;
+            a.muted = false;
+          }).catch(function () { a.muted = false; });
+        });
+      }
+
       function startTheGame() {
         document.getElementById("startScreen").style.display = "none";
-        loadArLibraries()
+        unlockAudio();
+        const motionPromise = requestMotionPermission();
+
+        Promise.all([loadArLibraries(), motionPromise])
+          .then(function () {
+            buildScene();
+            startGpsWatch();
+          })
           .catch(function (err) {
             console.error(err);
             alert("לא הצלחנו לטעון את מנוע המציאות הרבודה. בדוק חיבור לאינטרנט ונסה שוב.");
-          })
-          .finally(function () {
-            var bgMusic = document.getElementById("bgMusic");
-            bgMusic.play().catch(function () { console.log("אודיו חסום"); });
           });
       }
 
@@ -235,6 +433,12 @@
           let ping = document.getElementById("pingSound");
           ping.currentTime = 0;
           ping.play();
+
+          // המודל נאסף - מסירים אותו מהמרחב
+          let modelEl = document.getElementById("place-" + id);
+          if (modelEl && modelEl.parentNode) {
+            modelEl.parentNode.removeChild(modelEl);
+          }
 
           let hintElement = document.getElementById("hint-" + id);
           if (hintElement) {
@@ -282,27 +486,6 @@
           }());
         }
       }
-
-      window.addEventListener('gps-camera-update-position', function (e) {
-        const locations = {
-          reines: { lat: 32.1485, lon: 34.8425 },
-          library: { lat: 32.1481, lon: 34.8398 },
-          heart: { lat: 32.1478, lon: 34.8402 },
-          ninja: { lat: 32.1458, lon: 34.8340 },
-          pasta: { lat: 32.0743, lon: 34.7921 },
-          comedy: { lat: 32.0751, lon: 34.7749 }
-        };
-
-        let userLat = e.detail.position.latitude;
-        let userLon = e.detail.position.longitude;
-
-        for (let key in locations) {
-          let dist = calcDistance(userLat, userLon, locations[key].lat, locations[key].lon);
-          if (dist < 20) {
-            foundItem(key);
-          }
-        }
-      });
 
       function calcDistance(lat1, lon1, lat2, lon2) {
         let R = 6371000;
