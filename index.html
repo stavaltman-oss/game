@@ -184,10 +184,10 @@
         // size = הגודל במטרים של הצלע הארוכה של המודל. המודלים מותאמים לגודל הזה אוטומטית
         //        וממורכזים סביב הנקודה, כך שלא משנה באיזה קנה מידה יוצאו מהתוכנה.
         // rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
-        home1: { type: "indoor", pos: "2 -0.5 -3",  size: 0.6, file: "home_loc1.glb" },
-        home2: { type: "indoor", pos: "-2 -0.5 -3", size: 0.6, file: "home_loc2.glb" },
-        home3: { type: "indoor", pos: "3 -0.5 -1",  size: 0.6, file: "home_loc3.glb" },
-        home4: { type: "indoor", pos: "-3 -0.5 -1", size: 0.6, file: "home_loc4.glb" },
+        home1: { type: "indoor", pos: "2 -0.5 -3",  size: 1.2, file: "home_loc1.glb" },
+        home2: { type: "indoor", pos: "-2 -0.5 -3", size: 1.2, file: "home_loc2.glb" },
+        home3: { type: "indoor", pos: "3 -0.5 -1",  size: 1.2, file: "home_loc3.glb" },
+        home4: { type: "indoor", pos: "-3 -0.5 -1", size: 1.2, file: "home_loc4.glb" },
 
         // --- בחוץ: מיקומי GPS קבועים
         reines:  { type: "gps", lat: 32.1485, lon: 34.8425, size: 3, file: "reines_36.glb" },
@@ -288,6 +288,7 @@
           '<a-scene id="arScene" vr-mode-ui="enabled: false" cursor="rayOrigin: mouse"' +
           ' raycaster="near: 0; far: 50000; objects: .clickable"' +
           ' arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"' +
+          ' gltf-model="dracoDecoderPath: https://www.gstatic.com/draco/versioned/decoders/1.5.6/"' +
           ' renderer="antialias: true; alpha: true">' +
           '<a-camera ' + camAttr + '></a-camera>' + entities +
           '</a-scene>';
