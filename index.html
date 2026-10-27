@@ -269,6 +269,7 @@
 
         let entities = "";
         for (let id in PLACES) {
+          if (foundList[id]) continue;
           const p = PLACES[id];
           let placeAttr = "";
           if (p.type === "gps") {
@@ -298,6 +299,7 @@
         // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
         for (let id in PLACES) {
           const el = document.getElementById("model-" + id);
+          if (!el) continue;
           el.addEventListener("click", function () { foundItem(id); });
           el.addEventListener("model-loaded", function () { fitModel(id, el); });
           el.addEventListener("model-error", function () {
@@ -364,12 +366,49 @@
           if (!box) {
             box = document.createElement("div");
             box.id = "debugBox";
-            box.style.cssText = "position:fixed;bottom:10px;left:10px;z-index:9998;background:rgba(0,0,0,0.7);" +
+            box.style.cssText = "position:fixed;bottom:130px;left:10px;z-index:9998;background:rgba(0,0,0,0.7);" +
               "color:#fff;font:12px monospace;padding:8px;border-radius:8px;direction:ltr;white-space:pre;";
             document.body.appendChild(box);
           }
           box.textContent = debugLines.join("\n");
         }
+      }
+
+      // הודעת שגיאת מיקום ברורה על המסך
+      function showGpsError(err) {
+        const code = err && err.code;
+        console.warn("GPS error:", code, err && err.message);
+        const texts = {
+          1: "הדפדפן חוסם גישה למיקום (שגיאה 1). באייפון: הגדרות ← פרטיות ואבטחה ← שירותי מיקום ← Safari Websites ← 'בזמן השימוש', ואז לסגור את הלשונית ולפתוח מחדש ב-Safari.",
+          2: "לא ניתן לקבוע מיקום (שגיאה 2). נסי לוודא שהמיקום דלוק, ושאת במקום פתוח.",
+          3: "קביעת המיקום לוקחת יותר מדי זמן (שגיאה 3). נסי במקום פתוח."
+        };
+        let box = document.getElementById("gpsErrorBox");
+        if (!box) {
+          box = document.createElement("div");
+          box.id = "gpsErrorBox";
+          box.style.cssText = "position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9998;" +
+            "width:88%;max-width:420px;background:#fff;border:3px solid #06b6d4;border-radius:16px;" +
+            "padding:12px 14px;font-size:13px;font-weight:600;line-height:1.5;color:#1f2937;" +
+            "direction:rtl;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,0.2);";
+          document.body.appendChild(box);
+        }
+        box.textContent = texts[code] || "שגיאת מיקום לא ידועה.";
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions.query({ name: "geolocation" }).then(function (r) {
+            box.textContent += " (מצב הרשאה בדפדפן: " + r.state + ")";
+          }).catch(function () {});
+        }
+      }
+
+      // בקשת הרשאת מיקום ישירות מתוך הלחיצה (אייפון מקפיד על זה)
+      function primeGpsPermission() {
+        if (SIM || !navigator.geolocation) return;
+        navigator.geolocation.getCurrentPosition(
+          function (pos) { onUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
+          showGpsError,
+          { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+        );
       }
 
       function startGpsWatch() {
@@ -380,7 +419,7 @@
         if (!navigator.geolocation) return;
         navigator.geolocation.watchPosition(
           function (pos) { onUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy); },
-          function (err) { console.warn("GPS error:", err.message); },
+          showGpsError,
           { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }
         );
       }
@@ -415,6 +454,7 @@
         document.getElementById("startScreen").style.display = "none";
         unlockAudio();
         const motionPromise = requestMotionPermission();
+        primeGpsPermission();
 
         Promise.all([loadArLibraries(), motionPromise])
           .then(function () {
