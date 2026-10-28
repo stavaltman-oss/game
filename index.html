@@ -170,7 +170,7 @@
       const HOME_MIN_MOVE = 8;
       const WALK_MIN_MOVE = 2;
 
-      // הגדרת המודלים - מודלי הבית מחוברים לברקודים 0-3
+      // הגדרות המודלים והברקודים
       const PLACES = {
         home1: { type: "barcode", barcodeValue: 0, size: 1.2, file: "home_loc1.glb" },
         home2: { type: "barcode", barcodeValue: 1, size: 1.2, file: "home_loc2.glb" },
@@ -255,7 +255,13 @@
       function wireModel(id) {
         const el = document.getElementById("model-" + id);
         if (!el) return;
-        el.addEventListener("click", function () { foundItem(id); });
+
+        // איסוף המודל בלחיצה עליו בלבד
+        el.addEventListener("click", function (evt) {
+          evt.stopPropagation();
+          foundItem(id);
+        });
+
         el.addEventListener("model-loaded", function () { fitModel(id, el); });
         el.addEventListener("model-error", function () {
           console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
@@ -281,7 +287,7 @@
           if (p.type === "gps") {
             entities += entityHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
           } else if (p.type === "barcode") {
-            entities += '<a-marker type="barcode" value="' + p.barcodeValue + '">' +
+            entities += '<a-marker type="barcode" value="' + p.barcodeValue + '" id="marker-' + id + '">' +
                         entityHtml(id, '') +
                         '</a-marker>';
           }
@@ -530,3 +536,6 @@
     </script>
   </body>
 </html>
+```
+
+הקובץ מעודכן עכשיו בפורמט HTML תקין לחלוטין. תוכלי להוריד אותו ישירות מהחלון או להעתיק את תוכנו ולעדכן את `index.html` ב-GitHub!
