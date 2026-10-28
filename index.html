@@ -76,6 +76,29 @@
         text-align: center;
       }
 
+      .hints-container {
+        width: min(280px, 62vw);
+      }
+
+      .hints-title {
+        cursor: pointer;
+      }
+
+      .hints-container.collapsed .hint-item {
+        display: none;
+      }
+
+      .hints-container.collapsed .hints-title {
+        margin-bottom: 0;
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      .hints-container.collapsed .hints-toggle {
+        display: inline-block;
+        transform: rotate(180deg);
+      }
+
       .hint-item {
         background: #ffffff;
         margin: 10px 0;
@@ -198,6 +221,7 @@
       <h1 style="color: #0891b2; font-size: 28px; margin-bottom: 10px;">ג'רי וג'רמי יוצאים למסע</h1>
       <p id="startText" style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכן להתחיל בחיפוש הזיכרונות?</p>
       <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
+      <div id="versionTag" style="position:absolute;bottom:12px;left:0;right:0;color:#94a3b8;font-size:12px;"></div>
     </div>
 
     <!-- קבצי אודיו מה-repo (ישירות ליד index.html, בלי תיקיות) -->
@@ -207,7 +231,7 @@
 
     <!-- תיבת הרמזים שמוצגת כל הזמן -->
     <div class="hints-container">
-      <h3 class="hints-title"> הרמזים שנותרו לך:</h3>
+      <h3 class="hints-title" onclick="this.parentNode.classList.toggle('collapsed')"> הרמזים שנותרו לך: <span class="hints-toggle">▲</span></h3>
       <div id="hint-home1" class="hint-item"> <b></b> איפה שאני שומרת את החולצה שלך</div>
       <div id="hint-home2" class="hint-item"> <b></b> המכה שאתה תמיד מתלונן שעשתה לך שטף דם</div>
       <div id="hint-home3" class="hint-item"> <b></b> המכשיר שכבר נהיה תנור לחם השום האישי שלך</div>
@@ -303,6 +327,7 @@
       //   ?sim=32.1485,34.8425  - "לעמוד" בנקודת GPS מסוימת (בשלב בחוץ)
       //   &debug=1              - להציג מיקום ומרחקים בפינה
       // ============================================================
+      const GAME_VERSION = "4";
       const urlParams = new URLSearchParams(window.location.search);
       const SIM = (function () {
         const raw = urlParams.get("sim");
@@ -362,6 +387,8 @@
           if (h) h.remove();
         }
       }
+
+      document.getElementById("versionTag").textContent = "גרסה " + GAME_VERSION;
 
       if (PHASE === "outdoor") {
         document.getElementById("startText").textContent = "סיימת את הבית! ממשיכים לחפש בחוץ";
@@ -540,6 +567,99 @@
         });
 
         setupTapToCollect();
+        startHomeDiagnostics();
+      }
+
+      // ------------------------------------------------------------
+      //  בדיקה עצמית בשלב הבית: מציגה על המסך אם חסר קובץ ברקוד,
+      //  אם המצלמה לא עלתה, ואיזה ברקוד המצלמה מזהה כרגע.
+      //  הלוח מופיע לבד כשיש בעיה, ותמיד עם ?debug=1 בכתובת.
+      // ------------------------------------------------------------
+      // מצב חישוב הסף של זיהוי הברקוד (עוזר בתאורה לא אחידה / ברק על הנייר):
+      // 0 = רגיל, 1 = חציון, 2 = אוטו' (Otsu), 3 = מסתגל (הכי עמיד לתאורה, קצת יותר כבד)
+      const THRESHOLD_MODE = 3;
+
+      const diag = { camera: "מחכה...", ar: "מחכה...", files: {}, seen: {}, problem: false };
+
+      function startHomeDiagnostics() {
+        const ids = idsOfType("marker").filter(function (id) { return !foundList[id]; });
+
+        ids.forEach(function (id) {
+          diag.files[id] = "בודק...";
+          diag.seen[id] = false;
+          fetch(PLACES[id].patt, { cache: "no-store" })
+            .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+            .then(function (txt) {
+              const nums = txt.trim().split(/\s+/).length;
+              if (nums === 3072) diag.files[id] = "✓";
+              else { diag.files[id] = "✗ קובץ פגום (" + nums + ")"; diag.problem = true; }
+              renderDiag();
+            })
+            .catch(function (status) {
+              diag.files[id] = "✗ חסר ב-GitHub (" + status + ")";
+              diag.problem = true;
+              renderDiag();
+            });
+
+          const m = document.getElementById("marker-" + id);
+          m.addEventListener("markerFound", function () { diag.seen[id] = true; renderDiag(); });
+          m.addEventListener("markerLost", function () { diag.seen[id] = false; renderDiag(); });
+        });
+
+        window.addEventListener("arjs-video-loaded", function () { diag.camera = "✓"; renderDiag(); });
+        window.addEventListener("camera-error", function () {
+          diag.camera = "✗ אין גישה למצלמה"; diag.problem = true; renderDiag();
+        });
+
+        // מחכים שמנוע הזיהוי יעלה, ואז מפעילים סף אוטומטי לתאורה
+        let tries = 0;
+        const timer = setInterval(function () {
+          tries++;
+          const ctrl = getArController();
+          if (ctrl) {
+            clearInterval(timer);
+            diag.ar = "✓";
+            if (THRESHOLD_MODE && ctrl.setThresholdMode) {
+              try { ctrl.setThresholdMode(THRESHOLD_MODE); } catch (e) { console.warn(e); }
+            }
+            renderDiag();
+          } else if (tries > 40) {          // 20 שניות
+            clearInterval(timer);
+            diag.ar = "✗ מנוע הזיהוי לא עלה";
+            diag.problem = true;
+            renderDiag();
+          }
+        }, 500);
+
+        renderDiag();
+      }
+
+      function getArController() {
+        try {
+          const sys = document.getElementById("arScene").systems.arjs;
+          const ctx = (sys._arSession && sys._arSession.arContext) || sys.arToolkitContext ||
+                      (sys._arSession && sys._arSession.arToolkitContext);
+          return ctx && ctx.arController;
+        } catch (e) { return null; }
+      }
+
+      const HOME_NAMES = { home1: "ברקוד 1", home2: "ברקוד 2", home3: "ברקוד 3", home4: "ברקוד 4" };
+      function renderDiag() {
+        if (!DEBUG && !diag.problem) return;
+        let box = document.getElementById("diagBox");
+        if (!box) {
+          box = document.createElement("div");
+          box.id = "diagBox";
+          box.style.cssText = "position:fixed;bottom:20px;left:10px;z-index:9998;background:rgba(0,0,0,0.75);" +
+            "color:#fff;font:13px 'Assistant',sans-serif;padding:10px 12px;border-radius:12px;direction:rtl;" +
+            "line-height:1.6;max-width:70%;pointer-events:none;";
+          document.body.appendChild(box);
+        }
+        let lines = ["גרסה " + GAME_VERSION, "מצלמה: " + diag.camera, "מנוע זיהוי: " + diag.ar];
+        for (let id in diag.files) {
+          lines.push(HOME_NAMES[id] + ": קובץ " + diag.files[id] + (diag.seen[id] ? "  👁 מזוהה עכשיו" : ""));
+        }
+        box.innerHTML = lines.join("<br>");
       }
 
       // לחיצה על המסך: אוספת את המודל הגלוי שהכי קרוב לנקודת הלחיצה.
