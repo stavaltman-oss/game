@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;600;700&family=Rubik:wght@300..900&display=swap" rel="stylesheet">
 
+    <!-- A-Frame + AR.js נטענים בלחיצה על "צא לדרך" (נדרש להרשאת מצלמה ב-iOS) -->
     <!-- טעינת ספריית קונפטי לניצחון -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
 
@@ -124,21 +125,21 @@
   </head>
   <body style="margin: 0; overflow: hidden;">
 
-    <!-- מסך פתיחה להפעלת האודיו והמצלמה -->
+    <!-- מסך פתיחה חיוני להפעלת האודיו והמצלמה -->
     <div id="startScreen" class="start-screen">
       <h1 style="color: #0891b2; font-size: 28px; margin-bottom: 10px;">ג'רי וג'רמי יוצאים למסע</h1>
       <p style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכן להתחיל בחיפוש הזיכרונות?</p>
-      <button class="start-btn" onclick="startTheGame()">צא לדרך!</button>
+      <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
     </div>
 
-    <!-- קבצי אודיו -->
+    <!-- קבצי אודיו מה-repo (ישירות ליד index.html, בלי תיקיות) -->
     <audio id="bgMusic" src="bg-music.mp3" loop preload="auto"></audio>
     <audio id="pingSound" src="ping.mp3" preload="auto"></audio>
     <audio id="victoryMusic" src="victory.mp3" preload="auto"></audio>
 
-    <!-- תיבת הרמזים -->
+    <!-- תיבת הרמזים שמוצגת כל הזמן -->
     <div class="hints-container">
-      <h3 class="hints-title">הרמזים שנותרו לך:</h3>
+      <h3 class="hints-title"> הרמזים שנותרו לך:</h3>
       <div id="hint-home1" class="hint-item"> <b></b> איפה שאני שומרת את החולצה שלך</div>
       <div id="hint-home2" class="hint-item"> <b></b> המכה שאתה תמיד מתלונן שעשתה לך שטף דם</div>
       <div id="hint-home3" class="hint-item"> <b></b> המכשיר שכבר נהיה תנור לחם השום האישי שלך</div>
@@ -153,30 +154,53 @@
 
     <!-- חלונית הניצחון הסופית -->
     <div id="victoryBox" class="victory-modal">
-      <h2 class="victory-title">כל הכבוד! 🎉</h2>
+      <h2 class="victory-title"> כל הכבוד! </h2>
       <p class="victory-text">הצלחת למצוא את הכל!<br>עכשיו גש לסתיו לקבלת הפרס הסופי!</p>
     </div>
+    <!-- מנוע ה-AR והמודלים נבנים בקוד (buildScene) אחרי שהספריות נטענו, בלחיצה על "צא לדרך" -->
 
+    <!-- מערכת ניהול הלוגיקה, המוזיקה והקונפטי -->
     <script>
       let foundList = {
         home1: false, home2: false, home3: false, home4: false,
         reines: false, library: false, heart: false, ninja: false, pasta: false, comedy: false
       };
 
+      // ============================================================
+      //  הגדרות המשחק - כאן מכווננים מיקומים, גדלים ושמות קבצים
+      // ============================================================
+
+      // מודלי ה-GLB נמצאים ישירות ליד index.html (בלי תיקייה). שם הקובץ של כל פריט = <id>.glb
+      // אם קראת לקבצים אחרת - שנה את שדה file של הפריט הרלוונטי.
       const MODEL_DIR = "";
+
+      // מרחק (במטרים) שבו פריט חיצוני נאסף אוטומטית. 20 = כמו בקוד המקורי.
       const COLLECT_RADIUS = 20;
+
+      // סיבוב המודלים במקום סביב עצמם: זמן סיבוב מלא בשניות (0 = בלי סיבוב).
+      // אפשר לבטל סיבוב למודל מסוים עם spin: false בהגדרה שלו.
       const SPIN_SECONDS = 10;
+
+      // יציבות מיקום: ה-GPS "רועד" בכמה מטרים גם כשעומדים במקום, והמודלים זזים איתו.
+      // בקרבת נקודת ההתחלה (הבית) המצלמה מתעדכנת רק אחרי תזוזה של HOME_MIN_MOVE מטר לפחות,
+      // ומחוץ לאזור הזה (בהליכה) אחרי WALK_MIN_MOVE מטר.
       const HOME_RADIUS = 25;
       const HOME_MIN_MOVE = 8;
       const WALK_MIN_MOVE = 2;
 
-      // הגדרות המודלים והברקודים
       const PLACES = {
-        home1: { type: "barcode", barcodeValue: 0, size: 1.2, file: "home_loc1.glb" },
-        home2: { type: "barcode", barcodeValue: 1, size: 1.2, file: "home_loc2.glb" },
-        home3: { type: "barcode", barcodeValue: 2, size: 1.2, file: "home_loc3.glb" },
-        home4: { type: "barcode", barcodeValue: 3, size: 1.2, file: "home_loc4.glb" },
+        // --- בתוך הבית: pos = "x y z" במטרים מנקודת ההתחלה שבה לחצת "צא לדרך".
+        //     x = מזרחה (שלילי = מערבה), z = דרומה (שלילי = צפונה), y = גובה יחסית לגובה העיניים.
+        //     אלה ערכי התחלה בלבד - עדכן אותם לפי הבית שלך.
+        // size = הגודל במטרים של הצלע הארוכה של המודל. המודלים מותאמים לגודל הזה אוטומטית
+        //        וממורכזים סביב הנקודה, כך שלא משנה באיזה קנה מידה יוצאו מהתוכנה.
+        // rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
+        home1: { type: "indoor", pos: "2 -0.5 -3",  size: 1.2, file: "home_loc1.glb" },
+        home2: { type: "indoor", pos: "-2 -0.5 -3", size: 1.2, file: "home_loc2.glb" },
+        home3: { type: "indoor", pos: "3 -0.5 -1",  size: 1.2, file: "home_loc3.glb" },
+        home4: { type: "indoor", pos: "-3 -0.5 -1", size: 1.2, file: "home_loc4.glb" },
 
+        // --- בחוץ: מיקומי GPS קבועים
         reines:  { type: "gps", lat: 32.1485, lon: 34.8425, size: 3, file: "reines_36.glb" },
         library: { type: "gps", lat: 32.1481, lon: 34.8398, size: 3, file: "alon_library.glb" },
         heart:   { type: "gps", lat: 32.1478, lon: 34.8402, size: 3, file: "alon_heart.glb" },
@@ -185,6 +209,8 @@
         comedy:  { type: "gps", lat: 32.0751, lon: 34.7749, size: 3, rot: "90 0 0", file: "comedy_club.glb" }
       };
 
+      // בדיקות במחשב: הוסף לכתובת  ?sim=32.1485,34.8425  כדי "לעמוד" בנקודה מסוימת
+      // והוסף  &debug=1  כדי לראות בפינה את המיקום והמרחקים לכל פריט.
       const urlParams = new URLSearchParams(window.location.search);
       const SIM = (function () {
         const raw = urlParams.get("sim");
@@ -194,6 +220,10 @@
       })();
       const DEBUG = urlParams.has("debug");
 
+      // ============================================================
+      //  טעינת הספריות (A-Frame 1.3.0 + AR.js מבוסס מיקום)
+      //  זה הצירוף שבדוגמה הרשמית של AR.js למיקום. נוסה מקור גיבוי אם הראשון נכשל.
+      // ============================================================
       const AFRAME_SRC = "https://aframe.io/releases/1.3.0/aframe.min.js";
       const AR_SETS = [
         [
@@ -225,7 +255,9 @@
       }
 
       function loadArLibraries() {
-        if (arLibrariesLoaded) return Promise.resolve();
+        if (arLibrariesLoaded) {
+          return Promise.resolve();
+        }
         return loadScript(AFRAME_SRC)
           .then(function () {
             return AR_SETS.reduce(function (p, set) {
@@ -237,13 +269,17 @@
           });
       }
 
+      // ============================================================
+      //  בניית סצנת ה-AR והמודלים (אחרי שהספריות נטענו)
+      // ============================================================
       function entityHtml(id, placeAttr) {
         const p = PLACES[id];
+        // אלמנט חיצוני = נקודת המיקום. אלמנט פנימי = המודל, שמותאם לגודל וממורכז אחרי הטעינה.
         const spin = (SPIN_SECONDS > 0 && p.spin !== false)
           ? ' animation="property: rotation; from: 0 0 0; to: 0 360 0; dur: ' + (SPIN_SECONDS * 1000) +
             '; easing: linear; loop: true"'
           : "";
-
+        // place = נקודת המיקום, spin = ציר הסיבוב (במרכז המודל), model = המודל עצמו
         return '<a-entity id="place-' + id + '"' + placeAttr + '>' +
                '<a-entity id="spin-' + id + '"' + spin + '>' +
                '<a-entity id="model-' + id + '" class="clickable"' +
@@ -252,16 +288,11 @@
                '</a-entity></a-entity>';
       }
 
+      // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
       function wireModel(id) {
         const el = document.getElementById("model-" + id);
         if (!el) return;
-
-        // איסוף המודל בלחיצה עליו בלבד
-        el.addEventListener("click", function (evt) {
-          evt.stopPropagation();
-          foundItem(id);
-        });
-
+        el.addEventListener("click", function () { foundItem(id); });
         el.addEventListener("model-loaded", function () { fitModel(id, el); });
         el.addEventListener("model-error", function () {
           console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
@@ -273,6 +304,30 @@
         });
       }
 
+      // מודלי הבית: כשיש GPS, מצלמת AR.js "קופצת" לקואורדינטות העולם של המיקום האמיתי
+      // (מספרים של מיליוני מטרים), ולכן מיקום יחסי חייב להימדד ממיקום המצלמה ברגע הזה.
+      // לכן מודלי הבית נוצרים רק אחרי קבלת מיקום ראשון, ומוצבים ביחס אליו.
+      // אם אין GPS (חסום/איטי) הם מוצבים ביחס לראשית הצירים אחרי כמה שניות.
+      let indoorPlaced = false;
+      function placeIndoorModels(origin) {
+        if (indoorPlaced) return;
+        indoorPlaced = true;
+        const scene = document.getElementById("arScene");
+        if (!scene) return;
+        let html = "";
+        const ids = [];
+        for (let id in PLACES) {
+          const p = PLACES[id];
+          if (p.type !== "indoor" || foundList[id]) continue;
+          const off = p.pos.split(/\s+/).map(Number);
+          const pos = (origin.x + off[0]) + " " + (origin.y + off[1]) + " " + (origin.z + off[2]);
+          html += entityHtml(id, ' position="' + pos + '"');
+          ids.push(id);
+        }
+        scene.insertAdjacentHTML("beforeend", html);
+        ids.forEach(wireModel);
+      }
+
       function buildScene() {
         let camAttr = "gps-new-camera";
         if (SIM) {
@@ -282,21 +337,14 @@
         let entities = "";
         for (let id in PLACES) {
           const p = PLACES[id];
-          if (foundList[id]) continue;
-
-          if (p.type === "gps") {
-            entities += entityHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
-          } else if (p.type === "barcode") {
-            entities += '<a-marker type="barcode" value="' + p.barcodeValue + '" id="marker-' + id + '">' +
-                        entityHtml(id, '') +
-                        '</a-marker>';
-          }
+          if (p.type !== "gps" || foundList[id]) continue;
+          entities += entityHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
         }
 
         const html =
           '<a-scene id="arScene" vr-mode-ui="enabled: false" cursor="rayOrigin: mouse"' +
           ' raycaster="near: 0; far: 50000; objects: .clickable"' +
-          ' arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; detectionMode: barcode; matrixCodeType: 3x3_HAMMING63;"' +
+          ' arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;"' +
           ' gltf-model="dracoDecoderPath: https://www.gstatic.com/draco/versioned/decoders/1.5.6/"' +
           ' renderer="antialias: true; alpha: true">' +
           '<a-camera ' + camAttr + '></a-camera>' + entities +
@@ -305,10 +353,23 @@
         document.body.insertAdjacentHTML("beforeend", html);
 
         for (let id in PLACES) {
-          wireModel(id);
+          if (PLACES[id].type === "gps") wireModel(id);
         }
+
+        const cam = document.querySelector("a-camera");
+        cam.addEventListener("gps-camera-update-position", function () {
+          const c = cam.object3D.position;
+          placeIndoorModels({ x: c.x, y: c.y, z: c.z });
+        });
+        setTimeout(function () {
+          if (!indoorPlaced) {
+            console.warn("אין מיקום GPS - מודלי הבית מוצבים ביחס לראשית הצירים");
+            placeIndoorModels({ x: 0, y: 0, z: 0 });
+          }
+        }, 10000);
       }
 
+      // התאמת גודל ומרכוז של מודל אחרי שנטען
       const EYE_HEIGHT = 1.6;
       function fitModel(id, el) {
         const THREE = AFRAME.THREE;
@@ -316,10 +377,10 @@
         const obj = el.getObject3D("mesh");
         if (!obj) return;
 
-        const spinEl = el.parentNode;
-        const placeEl = spinEl.parentNode;
+        const spinEl = el.parentNode;                 // ציר הסיבוב
+        const placeEl = spinEl.parentNode;            // נקודת המיקום
         const savedSpin = spinEl.object3D.rotation.y;
-        spinEl.object3D.rotation.y = 0;
+        spinEl.object3D.rotation.y = 0;               // מודדים בזווית אפס, בלי קשר לסיבוב הרץ
 
         el.object3D.scale.set(1, 1, 1);
         el.object3D.position.set(0, 0, 0);
@@ -339,12 +400,15 @@
 
         el.object3D.scale.setScalar(s);
         el.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
-        
+        // פריטי GPS בחוץ: מרימים את המודל כך שיעמוד על הקרקע (מתחת לגובה העיניים)
         if (p.type === "gps") {
           el.object3D.position.y += p.size / 2 - EYE_HEIGHT;
         }
       }
 
+      // ============================================================
+      //  מעקב מיקום ואיסוף אוטומטי של פריטי GPS
+      // ============================================================
       let homeFix = null;
       function tuneGpsStability(lat, lon) {
         if (!homeFix) homeFix = { lat: lat, lon: lon };
@@ -382,13 +446,14 @@
         }
       }
 
+      // הודעת שגיאת מיקום ברורה על המסך
       function showGpsError(err) {
         const code = err && err.code;
         console.warn("GPS error:", code, err && err.message);
         const texts = {
-          1: "הדפדפן חוסם גישה למיקום (שגיאה 1).",
-          2: "לא ניתן לקבוע מיקום (שגיאה 2).",
-          3: "קביעת המיקום לוקחת יותר מדי זמן (שגיאה 3)."
+          1: "הדפדפן חוסם גישה למיקום (שגיאה 1). באייפון: הגדרות ← פרטיות ואבטחה ← שירותי מיקום ← Safari Websites ← 'בזמן השימוש', ואז לסגור את הלשונית ולפתוח מחדש ב-Safari.",
+          2: "לא ניתן לקבוע מיקום (שגיאה 2). נסי לוודא שהמיקום דלוק, ושאת במקום פתוח.",
+          3: "קביעת המיקום לוקחת יותר מדי זמן (שגיאה 3). נסי במקום פתוח."
         };
         let box = document.getElementById("gpsErrorBox");
         if (!box) {
@@ -401,8 +466,14 @@
           document.body.appendChild(box);
         }
         box.textContent = texts[code] || "שגיאת מיקום לא ידועה.";
+        if (navigator.permissions && navigator.permissions.query) {
+          navigator.permissions.query({ name: "geolocation" }).then(function (r) {
+            box.textContent += " (מצב הרשאה בדפדפן: " + r.state + ")";
+          }).catch(function () {});
+        }
       }
 
+      // בקשת הרשאת מיקום ישירות מתוך הלחיצה (אייפון מקפיד על זה)
       function primeGpsPermission() {
         if (SIM || !navigator.geolocation) return;
         navigator.geolocation.getCurrentPosition(
@@ -425,6 +496,11 @@
         );
       }
 
+      // ============================================================
+      //  התחלת המשחק
+      //  חשוב: הרשאת חישני התנועה באייפון והפעלת האודיו חייבות להתבצע
+      //  ישירות בתוך הלחיצה, לפני כל המתנה לטעינה.
+      // ============================================================
       function requestMotionPermission() {
         if (typeof DeviceOrientationEvent !== "undefined" &&
             typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -471,6 +547,7 @@
           ping.currentTime = 0;
           ping.play();
 
+          // המודל נאסף - מסירים אותו מהמרחב
           let modelEl = document.getElementById("place-" + id);
           if (modelEl && modelEl.parentNode) {
             modelEl.parentNode.removeChild(modelEl);
@@ -536,6 +613,3 @@
     </script>
   </body>
 </html>
-```
-
-הקובץ מעודכן עכשיו בפורמט HTML תקין לחלוטין. תוכלי להוריד אותו ישירות מהחלון או להעתיק את תוכנו ולעדכן את `index.html` ב-GitHub!
