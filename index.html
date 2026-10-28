@@ -121,6 +121,74 @@
         line-height: 1.6;
         color: #1f2937;
       }
+
+      .aim-bar {
+        display: none;
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9998;
+        width: 70%;
+        max-width: 320px;
+        background-color: #ffffff;
+        border: 3px solid #06b6d4;
+        border-radius: 18px;
+        padding: 10px 14px;
+        direction: rtl;
+        text-align: center;
+        box-shadow: 0px 6px 18px rgba(0, 0, 0, 0.2);
+        pointer-events: none;
+      }
+
+      .aim-text {
+        font-size: 15px;
+        font-weight: 700;
+        color: #0891b2;
+        margin-bottom: 8px;
+      }
+
+      .aim-track {
+        height: 10px;
+        background-color: #e0f2fe;
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      .aim-fill {
+        height: 100%;
+        width: 0%;
+        background-color: #06b6d4;
+        border-radius: 10px;
+        transition: width 0.1s linear;
+      }
+
+      .victory-modal .start-btn {
+        margin-top: 15px;
+      }
+
+      /* הודעה קצרה בתחתית המסך (נמצא ברקוד / נאסף) */
+      .toast {
+        position: fixed;
+        bottom: 30px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 9998;
+        background-color: #ffffff;
+        border: 3px solid #06b6d4;
+        border-radius: 50px;
+        padding: 10px 22px;
+        font-size: 16px;
+        font-weight: 700;
+        color: #0891b2;
+        direction: rtl;
+        text-align: center;
+        white-space: nowrap;
+        box-shadow: 0px 6px 18px rgba(0, 0, 0, 0.2);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+      }
     </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
@@ -128,7 +196,7 @@
     <!-- מסך פתיחה חיוני להפעלת האודיו והמצלמה -->
     <div id="startScreen" class="start-screen">
       <h1 style="color: #0891b2; font-size: 28px; margin-bottom: 10px;">ג'רי וג'רמי יוצאים למסע</h1>
-      <p style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכן להתחיל בחיפוש הזיכרונות?</p>
+      <p id="startText" style="color: #4b5563; font-size: 16px; padding: 0 20px;">מוכן להתחיל בחיפוש הזיכרונות?</p>
       <button class="start-btn" onclick="startTheGame()">צא לדרך! </button>
     </div>
 
@@ -157,7 +225,22 @@
       <h2 class="victory-title"> כל הכבוד! </h2>
       <p class="victory-text">הצלחת למצוא את הכל!<br>עכשיו גש לסתיו לקבלת הפרס הסופי!</p>
     </div>
-    <!-- מנוע ה-AR והמודלים נבנים בקוד (buildScene) אחרי שהספריות נטענו, בלחיצה על "צא לדרך" -->
+
+    <!-- חלונית סיום שלב הבית: מעבר לשלב בחוץ -->
+    <div id="homeDoneBox" class="victory-modal">
+      <h2 class="victory-title"> מצאת את כל מה שבבית! </h2>
+      <p class="victory-text">עכשיו יוצאים לחפש את שאר הזיכרונות בחוץ.</p>
+      <button class="start-btn" onclick="goOutdoor()">יוצאים החוצה! </button>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- פס התקדמות כשמכוונים אל מודל בחוץ -->
+    <div id="aimBar" class="aim-bar">
+      <div class="aim-text">ממשיך לכוון... 🎯</div>
+      <div class="aim-track"><div id="aimFill" class="aim-fill"></div></div>
+    </div>
+    <!-- מנוע ה-AR והמודלים נבנים בקוד אחרי שהספריות נטענו, בלחיצה על "צא לדרך" -->
 
     <!-- מערכת ניהול הלוגיקה, המוזיקה והקונפטי -->
     <script>
@@ -170,37 +253,40 @@
       //  הגדרות המשחק - כאן מכווננים מיקומים, גדלים ושמות קבצים
       // ============================================================
 
-      // מודלי ה-GLB נמצאים ישירות ליד index.html (בלי תיקייה). שם הקובץ של כל פריט = <id>.glb
+      // מודלי ה-GLB נמצאים ישירות ליד index.html (בלי תיקייה).
       // אם קראת לקבצים אחרת - שנה את שדה file של הפריט הרלוונטי.
       const MODEL_DIR = "";
 
-      // מרחק (במטרים) שבו פריט חיצוני נאסף אוטומטית. 20 = כמו בקוד המקורי.
+      // מרחק (במטרים) שבו פריט חיצוני נאסף אוטומטית.
       const COLLECT_RADIUS = 20;
+
+      // בחוץ: כמה שניות צריך לכוון את המצלמה אל המודל (כשנמצאים בטווח) כדי לאסוף אותו.
+      const AIM_SECONDS = 3;
+      // כמה "מרכזי" המודל צריך להיות על המסך: 0.6 = בערך 60% האמצעיים של המסך. גדול יותר = סלחני יותר.
+      const AIM_ZONE = 0.6;
 
       // סיבוב המודלים במקום סביב עצמם: זמן סיבוב מלא בשניות (0 = בלי סיבוב).
       // אפשר לבטל סיבוב למודל מסוים עם spin: false בהגדרה שלו.
       const SPIN_SECONDS = 10;
 
-      // יציבות מיקום: ה-GPS "רועד" בכמה מטרים גם כשעומדים במקום, והמודלים זזים איתו.
-      // בקרבת נקודת ההתחלה (הבית) המצלמה מתעדכנת רק אחרי תזוזה של HOME_MIN_MOVE מטר לפחות,
+      // יציבות מיקום בחוץ: ה-GPS "רועד" בכמה מטרים גם כשעומדים במקום.
+      // בקרבת נקודת ההתחלה המצלמה מתעדכנת רק אחרי תזוזה של HOME_MIN_MOVE מטר לפחות,
       // ומחוץ לאזור הזה (בהליכה) אחרי WALK_MIN_MOVE מטר.
       const HOME_RADIUS = 25;
       const HOME_MIN_MOVE = 8;
       const WALK_MIN_MOVE = 2;
 
       const PLACES = {
-        // --- בתוך הבית: pos = "x y z" במטרים מנקודת ההתחלה שבה לחצת "צא לדרך".
-        //     x = מזרחה (שלילי = מערבה), z = דרומה (שלילי = צפונה), y = גובה יחסית לגובה העיניים.
-        //     אלה ערכי התחלה בלבד - עדכן אותם לפי הבית שלך.
-        // size = הגודל במטרים של הצלע הארוכה של המודל. המודלים מותאמים לגודל הזה אוטומטית
-        //        וממורכזים סביב הנקודה, כך שלא משנה באיזה קנה מידה יוצאו מהתוכנה.
-        // rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
-        home1: { type: "indoor", pos: "2 -0.5 -3",  size: 1.2, file: "home_loc1.glb" },
-        home2: { type: "indoor", pos: "-2 -0.5 -3", size: 1.2, file: "home_loc2.glb" },
-        home3: { type: "indoor", pos: "3 -0.5 -1",  size: 1.2, file: "home_loc3.glb" },
-        home4: { type: "indoor", pos: "-3 -0.5 -1", size: 1.2, file: "home_loc4.glb" },
+        // --- בתוך הבית: כל פריט מופיע על הברקוד המודפס שלו ונאסף בלחיצה על המודל.
+        //     patt = קובץ הברקוד (צריך להיות ב-repo ליד index.html).
+        //     size = גודל המודל ביחס לברקוד: 1 = כמו רוחב הריבוע השחור, 1.5 = פי אחד וחצי.
+        //     rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
+        home1: { type: "marker", patt: "marker-home1.patt", size: 1.2, file: "home_loc1.glb" },
+        home2: { type: "marker", patt: "marker-home2.patt", size: 1.2, file: "home_loc2.glb" },
+        home3: { type: "marker", patt: "marker-home3.patt", size: 1.2, file: "home_loc3.glb" },
+        home4: { type: "marker", patt: "marker-home4.patt", size: 1.2, file: "home_loc4.glb" },
 
-        // --- בחוץ: מיקומי GPS קבועים
+        // --- בחוץ: מיקומי GPS קבועים. size = גודל במטרים.
         reines:  { type: "gps", lat: 32.1485, lon: 34.8425, size: 3, file: "reines_36.glb" },
         library: { type: "gps", lat: 32.1481, lon: 34.8398, size: 3, file: "alon_library.glb" },
         heart:   { type: "gps", lat: 32.1478, lon: 34.8402, size: 3, file: "alon_heart.glb" },
@@ -209,8 +295,14 @@
         comedy:  { type: "gps", lat: 32.0751, lon: 34.7749, size: 3, rot: "90 0 0", file: "comedy_club.glb" }
       };
 
-      // בדיקות במחשב: הוסף לכתובת  ?sim=32.1485,34.8425  כדי "לעמוד" בנקודה מסוימת
-      // והוסף  &debug=1  כדי לראות בפינה את המיקום והמרחקים לכל פריט.
+      // ============================================================
+      //  כתובות עזר לבדיקות:
+      //   ?phase=outdoor        - לדלג ישר לשלב בחוץ
+      //   ?phase=home           - לחזור לשלב הבית
+      //   ?reset=1              - למחוק התקדמות שמורה ולהתחיל מחדש
+      //   ?sim=32.1485,34.8425  - "לעמוד" בנקודת GPS מסוימת (בשלב בחוץ)
+      //   &debug=1              - להציג מיקום ומרחקים בפינה
+      // ============================================================
       const urlParams = new URLSearchParams(window.location.search);
       const SIM = (function () {
         const raw = urlParams.get("sim");
@@ -221,11 +313,68 @@
       const DEBUG = urlParams.has("debug");
 
       // ============================================================
-      //  טעינת הספריות (A-Frame 1.3.0 + AR.js מבוסס מיקום)
-      //  זה הצירוף שבדוגמה הרשמית של AR.js למיקום. נוסה מקור גיבוי אם הראשון נכשל.
+      //  שמירת התקדמות בטלפון (כדי שרענון הדף לא יאפס את המשחק)
+      // ============================================================
+      const SAVE_KEY = "jerry-jeremy-progress";
+
+      function saveProgress() {
+        try { localStorage.setItem(SAVE_KEY, JSON.stringify(foundList)); } catch (e) {}
+      }
+
+      function loadProgress() {
+        if (urlParams.has("reset")) {
+          try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+          return;
+        }
+        try {
+          const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "null");
+          if (saved) {
+            for (let id in foundList) {
+              if (saved[id] === true) foundList[id] = true;
+            }
+          }
+        } catch (e) {}
+      }
+
+      function idsOfType(type) {
+        return Object.keys(PLACES).filter(function (id) { return PLACES[id].type === type; });
+      }
+
+      loadProgress();
+
+      // שלב המשחק: קודם הבית (ברקודים), אחר כך בחוץ (GPS).
+      // כל שלב משתמש בגרסה אחרת של מנוע ה-AR, ולכן המעבר ביניהם נעשה ברענון הדף.
+      const PHASE = (function () {
+        const forced = urlParams.get("phase");
+        if (forced === "home" || forced === "outdoor") return forced;
+        return idsOfType("marker").every(function (id) { return foundList[id]; }) ? "outdoor" : "home";
+      })();
+
+      // מי שהגיע לשלב בחוץ כבר סיים את הבית (או דילג בכוונה לבדיקה)
+      if (PHASE === "outdoor") {
+        idsOfType("marker").forEach(function (id) { foundList[id] = true; });
+      }
+
+      // רמזים של פריטים שכבר נמצאו לא מוצגים
+      for (let id in foundList) {
+        if (foundList[id]) {
+          const h = document.getElementById("hint-" + id);
+          if (h) h.remove();
+        }
+      }
+
+      if (PHASE === "outdoor") {
+        document.getElementById("startText").textContent = "סיימת את הבית! ממשיכים לחפש בחוץ";
+        document.querySelector("#startScreen .start-btn").textContent = "ממשיכים! ";
+      }
+
+      // ============================================================
+      //  טעינת הספריות (A-Frame 1.3.0 + AR.js)
+      //  בבית: גרסת הברקודים של AR.js. בחוץ: גרסת המיקום.
+      //  נוסה מקור גיבוי אם הראשון נכשל.
       // ============================================================
       const AFRAME_SRC = "https://aframe.io/releases/1.3.0/aframe.min.js";
-      const AR_SETS = [
+      const AR_SETS_OUTDOOR = [
         [
           "https://raw.githack.com/AR-js-org/AR.js/master/three.js/build/ar-threex-location-only.js",
           "https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"
@@ -235,8 +384,10 @@
           "https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar-nft.js"
         ]
       ];
-
-      let arLibrariesLoaded = false;
+      const AR_SETS_HOME = [
+        ["https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/aframe/build/aframe-ar.js"],
+        ["https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"]
+      ];
 
       function loadScript(src) {
         return new Promise(function (resolve, reject) {
@@ -255,31 +406,24 @@
       }
 
       function loadArLibraries() {
-        if (arLibrariesLoaded) {
-          return Promise.resolve();
-        }
-        return loadScript(AFRAME_SRC)
-          .then(function () {
-            return AR_SETS.reduce(function (p, set) {
-              return p.catch(function () { return loadSequence(set); });
-            }, Promise.reject());
-          })
-          .then(function () {
-            arLibrariesLoaded = true;
-          });
+        const sets = PHASE === "home" ? AR_SETS_HOME : AR_SETS_OUTDOOR;
+        return loadScript(AFRAME_SRC).then(function () {
+          return sets.reduce(function (p, set) {
+            return p.catch(function () { return loadSequence(set); });
+          }, Promise.reject());
+        });
       }
 
       // ============================================================
-      //  בניית סצנת ה-AR והמודלים (אחרי שהספריות נטענו)
+      //  בניית המודלים
       // ============================================================
-      function entityHtml(id, placeAttr) {
+      function modelHtml(id, placeAttr) {
         const p = PLACES[id];
-        // אלמנט חיצוני = נקודת המיקום. אלמנט פנימי = המודל, שמותאם לגודל וממורכז אחרי הטעינה.
         const spin = (SPIN_SECONDS > 0 && p.spin !== false)
           ? ' animation="property: rotation; from: 0 0 0; to: 0 360 0; dur: ' + (SPIN_SECONDS * 1000) +
             '; easing: linear; loop: true"'
           : "";
-        // place = נקודת המיקום, spin = ציר הסיבוב (במרכז המודל), model = המודל עצמו
+        // place = נקודת המיקום, spin = ציר הסיבוב, model = המודל עצמו
         return '<a-entity id="place-' + id + '"' + placeAttr + '>' +
                '<a-entity id="spin-' + id + '"' + spin + '>' +
                '<a-entity id="model-' + id + '" class="clickable"' +
@@ -288,58 +432,167 @@
                '</a-entity></a-entity>';
       }
 
-      // לחיצה על מודל = איסוף. אם קובץ ה-GLB לא נטען, מוצגת כדור תכלת במקומו כדי שאפשר יהיה לבדוק מיקום.
+      // אם קובץ ה-GLB לא נטען, מוצג כדור תכלת במקומו כדי שאפשר יהיה לבדוק את המשחק.
       function wireModel(id) {
         const el = document.getElementById("model-" + id);
         if (!el) return;
-        el.addEventListener("click", function () { foundItem(id); });
+        // בבית לחיצה אוספת. בחוץ אוספים רק בכיוון המצלמה (aimLoop), לא בלחיצה.
+        if (PLACES[id].type === "marker") {
+          el.addEventListener("click", function () { foundItem(id); });
+        }
         el.addEventListener("model-loaded", function () { fitModel(id, el); });
         el.addEventListener("model-error", function () {
           console.warn("לא נטען המודל של " + id + " (" + MODEL_DIR + PLACES[id].file + ")");
+          const p = PLACES[id];
           el.removeAttribute("gltf-model");
           el.setAttribute("geometry", "primitive: sphere; radius: 0.4");
           el.setAttribute("material", "color: #06b6d4; opacity: 0.85");
-          const fb = PLACES[id].size / 2 / 0.4;
+          const fb = p.size / 2 / 0.4;
           el.setAttribute("scale", fb + " " + fb + " " + fb);
+          // בברקוד: הכדור יושב על הברקוד ולא חצי בתוכו
+          if (p.type === "marker") el.setAttribute("position", "0 " + (p.size / 2) + " 0");
         });
       }
 
-      // מודלי הבית: כשיש GPS, מצלמת AR.js "קופצת" לקואורדינטות העולם של המיקום האמיתי
-      // (מספרים של מיליוני מטרים), ולכן מיקום יחסי חייב להימדד ממיקום המצלמה ברגע הזה.
-      // לכן מודלי הבית נוצרים רק אחרי קבלת מיקום ראשון, ומוצבים ביחס אליו.
-      // אם אין GPS (חסום/איטי) הם מוצבים ביחס לראשית הצירים אחרי כמה שניות.
-      let indoorPlaced = false;
-      function placeIndoorModels(origin) {
-        if (indoorPlaced) return;
-        indoorPlaced = true;
-        const scene = document.getElementById("arScene");
-        if (!scene) return;
-        let html = "";
-        const ids = [];
-        for (let id in PLACES) {
-          const p = PLACES[id];
-          if (p.type !== "indoor" || foundList[id]) continue;
-          const off = p.pos.split(/\s+/).map(Number);
-          const pos = (origin.x + off[0]) + " " + (origin.y + off[1]) + " " + (origin.z + off[2]);
-          html += entityHtml(id, ' position="' + pos + '"');
-          ids.push(id);
+      // התאמת גודל ומרכוז של מודל אחרי שנטען.
+      // המידות נמדדות ביחס לציר הסיבוב (spin), כך שזה עובד גם כשהברקוד בזווית כלשהי.
+      const EYE_HEIGHT = 1.6;
+      function fitModel(id, el) {
+        const THREE = AFRAME.THREE;
+        const p = PLACES[id];
+        const obj = el.getObject3D("mesh");
+        if (!obj) return;
+
+        const spinObj = el.parentNode.object3D;
+        el.object3D.scale.set(1, 1, 1);
+        el.object3D.position.set(0, 0, 0);
+
+        // מטריצה של אובייקט ביחס לציר הסיבוב (בלי תלות במיקום הברקוד/המצלמה)
+        function relMatrix(o) {
+          const m = new THREE.Matrix4();
+          while (o && o !== spinObj) {
+            o.updateMatrix();
+            m.premultiply(o.matrix);
+            o = o.parent;
+          }
+          return m;
         }
-        scene.insertAdjacentHTML("beforeend", html);
-        ids.forEach(wireModel);
+
+        const box = new THREE.Box3();
+        obj.traverse(function (child) {
+          if (!child.isMesh || !child.geometry) return;
+          if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+          const b = child.geometry.boundingBox.clone().applyMatrix4(relMatrix(child));
+          box.union(b);
+        });
+        if (box.isEmpty()) return;
+
+        const size = box.getSize(new THREE.Vector3());
+        const center = box.getCenter(new THREE.Vector3());
+        const longest = Math.max(size.x, size.y, size.z);
+        if (!isFinite(longest) || longest <= 0) return;
+        const s = p.size / longest;
+
+        el.object3D.scale.setScalar(s);
+        el.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
+
+        if (p.type === "marker") {
+          // המודל "עומד" על הברקוד
+          el.object3D.position.y += size.y * s / 2;
+        } else {
+          // פריטי GPS בחוץ: מורידים את המודל כך שיעמוד על הקרקע (מתחת לגובה העיניים)
+          el.object3D.position.y += p.size / 2 - EYE_HEIGHT;
+        }
       }
 
-      function buildScene() {
+      // ============================================================
+      //  שלב הבית: ברקודים
+      // ============================================================
+      function buildHomeScene() {
+        let markers = "";
+        idsOfType("marker").forEach(function (id) {
+          if (foundList[id]) return;
+          markers +=
+            '<a-marker id="marker-' + id + '" type="pattern" url="' + PLACES[id].patt + '"' +
+            ' emitevents="true" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">' +
+            modelHtml(id, "") +
+            '</a-marker>';
+        });
+
+        const html =
+          '<a-scene id="arScene" embedded vr-mode-ui="enabled: false"' +
+          ' arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono; patternRatio: 0.5;"' +
+          ' gltf-model="dracoDecoderPath: https://www.gstatic.com/draco/versioned/decoders/1.5.6/"' +
+          ' renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true">' +
+          markers +
+          '<a-entity camera></a-entity>' +
+          '</a-scene>';
+
+        document.body.insertAdjacentHTML("beforeend", html);
+
+        idsOfType("marker").forEach(function (id) {
+          if (foundList[id]) return;
+          wireModel(id);
+          const m = document.getElementById("marker-" + id);
+          m.addEventListener("markerFound", function () {
+            if (!foundList[id]) showToast("מצאת משהו! לחץ על המודל כדי לאסוף 👆", 2500);
+          });
+        });
+
+        setupTapToCollect();
+      }
+
+      // לחיצה על המסך: אוספת את המודל הגלוי שהכי קרוב לנקודת הלחיצה.
+      // (עובד יותר טוב באייפון מקליק רגיל על אובייקט תלת-ממדי)
+      function setupTapToCollect() {
+        let downX = 0, downY = 0;
+        document.addEventListener("pointerdown", function (e) { downX = e.clientX; downY = e.clientY; });
+        document.addEventListener("pointerup", function (e) {
+          if (Math.hypot(e.clientX - downX, e.clientY - downY) > 30) return; // גרירה, לא לחיצה
+          if (e.target.closest && e.target.closest(".hints-container, .victory-modal, .start-screen")) return;
+
+          const scene = document.getElementById("arScene");
+          if (!scene || !scene.camera || !scene.renderer) return;
+          const THREE = AFRAME.THREE;
+          const rect = scene.renderer.domElement.getBoundingClientRect();
+          const maxDist = Math.max(140, Math.min(window.innerWidth, window.innerHeight) * 0.35);
+
+          let best = null, bestDist = Infinity;
+          idsOfType("marker").forEach(function (id) {
+            if (foundList[id]) return;
+            const marker = document.getElementById("marker-" + id);
+            const model = document.getElementById("model-" + id);
+            if (!marker || !model || !marker.object3D.visible) return;
+
+            const box = new THREE.Box3().setFromObject(model.object3D);
+            const v = box.isEmpty() ? marker.object3D.getWorldPosition(new THREE.Vector3())
+                                    : box.getCenter(new THREE.Vector3());
+            v.project(scene.camera);
+            const sx = rect.left + (v.x + 1) / 2 * rect.width;
+            const sy = rect.top + (1 - v.y) / 2 * rect.height;
+            const d = Math.hypot(sx - e.clientX, sy - e.clientY);
+            if (d < bestDist) { bestDist = d; best = id; }
+          });
+
+          if (best && bestDist <= maxDist) foundItem(best);
+        });
+      }
+
+      // ============================================================
+      //  שלב בחוץ: GPS
+      // ============================================================
+      function buildOutdoorScene() {
         let camAttr = "gps-new-camera";
         if (SIM) {
           camAttr += '="simulateLatitude: ' + SIM.lat + '; simulateLongitude: ' + SIM.lon + '"';
         }
 
         let entities = "";
-        for (let id in PLACES) {
+        idsOfType("gps").forEach(function (id) {
+          if (foundList[id]) return;
           const p = PLACES[id];
-          if (p.type !== "gps" || foundList[id]) continue;
-          entities += entityHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
-        }
+          entities += modelHtml(id, ' gps-new-entity-place="latitude: ' + p.lat + '; longitude: ' + p.lon + '"');
+        });
 
         const html =
           '<a-scene id="arScene" vr-mode-ui="enabled: false" cursor="rayOrigin: mouse"' +
@@ -351,64 +604,10 @@
           '</a-scene>';
 
         document.body.insertAdjacentHTML("beforeend", html);
-
-        for (let id in PLACES) {
-          if (PLACES[id].type === "gps") wireModel(id);
-        }
-
-        const cam = document.querySelector("a-camera");
-        cam.addEventListener("gps-camera-update-position", function () {
-          const c = cam.object3D.position;
-          placeIndoorModels({ x: c.x, y: c.y, z: c.z });
-        });
-        setTimeout(function () {
-          if (!indoorPlaced) {
-            console.warn("אין מיקום GPS - מודלי הבית מוצבים ביחס לראשית הצירים");
-            placeIndoorModels({ x: 0, y: 0, z: 0 });
-          }
-        }, 10000);
+        idsOfType("gps").forEach(wireModel);
+        setInterval(aimLoop, AIM_TICK);
       }
 
-      // התאמת גודל ומרכוז של מודל אחרי שנטען
-      const EYE_HEIGHT = 1.6;
-      function fitModel(id, el) {
-        const THREE = AFRAME.THREE;
-        const p = PLACES[id];
-        const obj = el.getObject3D("mesh");
-        if (!obj) return;
-
-        const spinEl = el.parentNode;                 // ציר הסיבוב
-        const placeEl = spinEl.parentNode;            // נקודת המיקום
-        const savedSpin = spinEl.object3D.rotation.y;
-        spinEl.object3D.rotation.y = 0;               // מודדים בזווית אפס, בלי קשר לסיבוב הרץ
-
-        el.object3D.scale.set(1, 1, 1);
-        el.object3D.position.set(0, 0, 0);
-        placeEl.object3D.updateMatrixWorld(true);
-
-        const box = new THREE.Box3().setFromObject(obj);
-        const size = box.getSize(new THREE.Vector3());
-        const center = box.getCenter(new THREE.Vector3());
-        const placePos = new THREE.Vector3();
-        placeEl.object3D.getWorldPosition(placePos);
-        center.sub(placePos);
-        spinEl.object3D.rotation.y = savedSpin;
-
-        const longest = Math.max(size.x, size.y, size.z);
-        if (!isFinite(longest) || longest <= 0) return;
-        const s = p.size / longest;
-
-        el.object3D.scale.setScalar(s);
-        el.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
-        // פריטי GPS בחוץ: מרימים את המודל כך שיעמוד על הקרקע (מתחת לגובה העיניים)
-        if (p.type === "gps") {
-          el.object3D.position.y += p.size / 2 - EYE_HEIGHT;
-        }
-      }
-
-      // ============================================================
-      //  מעקב מיקום ואיסוף אוטומטי של פריטי GPS
-      // ============================================================
       let homeFix = null;
       function tuneGpsStability(lat, lon) {
         if (!homeFix) homeFix = { lat: lat, lon: lon };
@@ -419,19 +618,85 @@
         comp.threeLoc.setGpsOptions({ gpsMinDistance: atHome ? HOME_MIN_MOVE : WALK_MIN_MOVE });
       }
 
+      // ------------------------------------------------------------
+      //  איסוף בחוץ: צריך להיות בטווח COLLECT_RADIUS מטר
+      //  וגם לכוון את המצלמה אל המודל ברציפות AIM_SECONDS שניות.
+      // ------------------------------------------------------------
+      const inRange = {};
+      const aimMs = {};
+      const lostMs = {};
+      let nearHintShown = {};
+      const AIM_TICK = 100;
+
+      // האם המודל נמצא באזור המרכזי של המסך (ולא מאחורי המצלמה)
+      function isAimedAt(id) {
+        const scene = document.getElementById("arScene");
+        const place = document.getElementById("place-" + id);
+        const model = document.getElementById("model-" + id);
+        if (!scene || !scene.camera || !place || !model) return false;
+        const THREE = AFRAME.THREE;
+        const box = new THREE.Box3().setFromObject(model.object3D);
+        const v = box.isEmpty() ? place.object3D.getWorldPosition(new THREE.Vector3())
+                                : box.getCenter(new THREE.Vector3());
+        v.project(scene.camera);
+        if (v.z > 1 || v.z < -1) return false;                 // מאחורי המצלמה
+        return Math.abs(v.x) < AIM_ZONE && Math.abs(v.y) < AIM_ZONE;
+      }
+
+      function aimLoop() {
+        let bestId = null, bestMs = 0, anyInRange = null;
+        idsOfType("gps").forEach(function (id) {
+          if (foundList[id] || !inRange[id]) { aimMs[id] = 0; return; }
+          anyInRange = id;
+          if (isAimedAt(id)) {
+            aimMs[id] = (aimMs[id] || 0) + AIM_TICK;
+            lostMs[id] = 0;
+          } else {
+            // סלחנות קטנה לרעידות: רק אחרי חצי שנייה בלי כיוון מתחילים מחדש
+            lostMs[id] = (lostMs[id] || 0) + AIM_TICK;
+            if (lostMs[id] > 500) aimMs[id] = 0;
+          }
+          if (aimMs[id] >= AIM_SECONDS * 1000) {
+            aimMs[id] = 0;
+            hideAimBar();
+            foundItem(id);
+            return;
+          }
+          if (aimMs[id] > bestMs) { bestMs = aimMs[id]; bestId = id; }
+        });
+
+        if (bestId) {
+          showAimBar(bestMs / (AIM_SECONDS * 1000));
+        } else {
+          hideAimBar();
+          if (anyInRange && !nearHintShown[anyInRange]) {
+            nearHintShown[anyInRange] = true;
+            showToast("אתה קרוב! הפנה את המצלמה אל המודל 📷", 3500);
+          }
+        }
+      }
+
+      function showAimBar(fraction) {
+        const bar = document.getElementById("aimBar");
+        bar.style.display = "block";
+        document.getElementById("aimFill").style.width = Math.min(100, fraction * 100) + "%";
+      }
+
+      function hideAimBar() {
+        document.getElementById("aimBar").style.display = "none";
+      }
+
       function onUserPosition(lat, lon, accuracy) {
         tuneGpsStability(lat, lon);
         let debugLines = ["lat " + lat.toFixed(5) + "  lon " + lon.toFixed(5) + "  ±" + Math.round(accuracy) + "m"];
 
-        for (let id in PLACES) {
+        idsOfType("gps").forEach(function (id) {
           const p = PLACES[id];
-          if (p.type !== "gps") continue;
           const dist = calcDistance(lat, lon, p.lat, p.lon);
-          debugLines.push(id + (foundList[id] ? " ✓ " : "   ") + Math.round(dist) + "m");
-          if (dist < COLLECT_RADIUS) {
-            foundItem(id);
-          }
-        }
+          debugLines.push(id + (foundList[id] ? " ✓ " : "   ") + Math.round(dist) + "m" +
+                          (dist < COLLECT_RADIUS && !foundList[id] ? "  בטווח" : ""));
+          inRange[id] = dist < COLLECT_RADIUS;
+        });
 
         if (DEBUG) {
           let box = document.getElementById("debugBox");
@@ -451,9 +716,9 @@
         const code = err && err.code;
         console.warn("GPS error:", code, err && err.message);
         const texts = {
-          1: "הדפדפן חוסם גישה למיקום (שגיאה 1). באייפון: הגדרות ← פרטיות ואבטחה ← שירותי מיקום ← Safari Websites ← 'בזמן השימוש', ואז לסגור את הלשונית ולפתוח מחדש ב-Safari.",
-          2: "לא ניתן לקבוע מיקום (שגיאה 2). נסי לוודא שהמיקום דלוק, ושאת במקום פתוח.",
-          3: "קביעת המיקום לוקחת יותר מדי זמן (שגיאה 3). נסי במקום פתוח."
+          1: "הדפדפן חוסם גישה למיקום (שגיאה 1). באייפון: הגדרות ← פרטיות ואבטחה ← שירותי מיקום ← Safari Websites ← 'בזמן השימוש', ואז סגור את הלשונית ופתח אותה מחדש ב-Safari.",
+          2: "לא ניתן לקבוע מיקום (שגיאה 2). ודא שהמיקום דלוק ועמוד במקום פתוח.",
+          3: "קביעת המיקום לוקחת יותר מדי זמן (שגיאה 3). נסה במקום פתוח."
         };
         let box = document.getElementById("gpsErrorBox");
         if (!box) {
@@ -525,79 +790,103 @@
       function startTheGame() {
         document.getElementById("startScreen").style.display = "none";
         unlockAudio();
+
+        if (PHASE === "home") {
+          loadArLibraries()
+            .then(buildHomeScene)
+            .catch(onLoadError);
+          return;
+        }
+
         const motionPromise = requestMotionPermission();
         primeGpsPermission();
-
         Promise.all([loadArLibraries(), motionPromise])
           .then(function () {
-            buildScene();
+            buildOutdoorScene();
             startGpsWatch();
           })
-          .catch(function (err) {
-            console.error(err);
-            alert("לא הצלחנו לטעון את מנוע המציאות הרבודה. בדוק חיבור לאינטרנט ונסה שוב.");
-          });
+          .catch(onLoadError);
+      }
+
+      function onLoadError(err) {
+        console.error(err);
+        alert("לא הצלחנו לטעון את מנוע המציאות הרבודה. בדוק חיבור לאינטרנט ונסה שוב.");
+      }
+
+      // מעבר לשלב בחוץ: רענון הדף עם ?phase=outdoor (שומר sim/debug אם יש)
+      function goOutdoor() {
+        const params = new URLSearchParams(window.location.search);
+        params.set("phase", "outdoor");
+        params.delete("reset");
+        window.location.href = window.location.pathname + "?" + params.toString();
+      }
+
+      // ============================================================
+      //  איסוף, הודעות וניצחון
+      // ============================================================
+      let toastTimer = null;
+      function showToast(text, ms) {
+        const t = document.getElementById("toast");
+        t.textContent = text;
+        t.style.opacity = "1";
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { t.style.opacity = "0"; }, ms || 2000);
       }
 
       function foundItem(id) {
-        if (foundList[id] === false) {
-          foundList[id] = true;
-          
-          let ping = document.getElementById("pingSound");
-          ping.currentTime = 0;
-          ping.play();
+        if (foundList[id] !== false) return;
+        foundList[id] = true;
+        saveProgress();
 
-          // המודל נאסף - מסירים אותו מהמרחב
-          let modelEl = document.getElementById("place-" + id);
-          if (modelEl && modelEl.parentNode) {
-            modelEl.parentNode.removeChild(modelEl);
-          }
+        const ping = document.getElementById("pingSound");
+        ping.currentTime = 0;
+        ping.play().catch(function () {});
 
-          let hintElement = document.getElementById("hint-" + id);
-          if (hintElement) {
-            hintElement.style.opacity = "0";
-            setTimeout(() => { hintElement.remove(); }, 500);
-          }
-          
-          checkVictory();
+        // המודל נאסף - מסירים אותו מהמרחב (הברקוד עצמו נשאר, פשוט ריק)
+        const placeEl = document.getElementById("place-" + id);
+        if (placeEl && placeEl.parentNode) placeEl.parentNode.removeChild(placeEl);
+
+        const hintElement = document.getElementById("hint-" + id);
+        if (hintElement) {
+          hintElement.style.opacity = "0";
+          setTimeout(function () { hintElement.remove(); }, 500);
+        }
+
+        if (checkVictory()) return;
+
+        if (PHASE === "home" && idsOfType("marker").every(function (h) { return foundList[h]; })) {
+          setTimeout(function () {
+            document.getElementById("homeDoneBox").style.display = "block";
+            fireConfetti(1500);
+          }, 600);
+        } else {
+          showToast("נאסף! ✨", 1500);
         }
       }
 
       function checkVictory() {
-        let allFound = Object.values(foundList).every(status => status === true);
-        if (allFound) {
-          document.getElementById("bgMusic").pause();
-          
-          let vicMusic = document.getElementById("victoryMusic");
-          vicMusic.volume = 0.4;
-          vicMusic.play();
+        const allFound = Object.values(foundList).every(function (status) { return status === true; });
+        if (!allFound) return false;
 
-          document.getElementById("victoryBox").style.display = "block";
+        document.getElementById("bgMusic").pause();
+        const vicMusic = document.getElementById("victoryMusic");
+        vicMusic.volume = 0.4;
+        vicMusic.play().catch(function () {});
+        document.getElementById("homeDoneBox").style.display = "none";
+        document.getElementById("victoryBox").style.display = "block";
+        fireConfetti(4000);
+        return true;
+      }
 
-          let duration = 4 * 1000;
-          let end = Date.now() + duration;
-
-          (function frame() {
-            confetti({
-              particleCount: 4,
-              angle: 60,
-              spread: 55,
-              origin: { x: 0 },
-              colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00']
-            });
-            confetti({
-              particleCount: 4,
-              angle: 120,
-              spread: 55,
-              origin: { x: 1 },
-              colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00']
-            });
-
-            if (Date.now() < end) {
-              requestAnimationFrame(frame);
-            }
-          }());
-        }
+      function fireConfetti(duration) {
+        const end = Date.now() + duration;
+        (function frame() {
+          confetti({ particleCount: 4, angle: 60, spread: 55, origin: { x: 0 },
+                     colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00'] });
+          confetti({ particleCount: 4, angle: 120, spread: 55, origin: { x: 1 },
+                     colors: ['#06b6d4', '#e0f2fe', '#ffffff', '#ffcc00'] });
+          if (Date.now() < end) requestAnimationFrame(frame);
+        }());
       }
 
       function calcDistance(lat1, lon1, lat2, lon2) {
