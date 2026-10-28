@@ -303,20 +303,23 @@
       const PLACES = {
         // --- בתוך הבית: כל פריט מופיע על הברקוד המודפס שלו ונאסף בלחיצה על המודל.
         //     patt = קובץ הברקוד (צריך להיות ב-repo ליד index.html).
-        //     size = גודל המודל ביחס לברקוד: 1 = כמו רוחב הריבוע השחור, 1.5 = פי אחד וחצי.
+        //     size  = גודל המודל ביחס לברקוד: 1 = כמו רוחב הריבוע השחור (~14 ס"מ), 2.5 = פי שניים וחצי (~36 ס"מ).
+        //     mount = "wall" לברקוד שתלוי על קיר (ברירת המחדל), "floor" לברקוד שמונח על שולחן/רצפה.
+        //             בקיר: לתלות כשהכיתוב של הדף למעלה. המודל מופיע זקוף ומרחף קצת לפני הקיר.
         //     rot  = סיבוב אופציונלי במעלות "x y z" (למשל כדי להעמיד מודל שרובץ על הצד).
-        home1: { type: "marker", patt: "marker-home1.patt", size: 1.2, file: "home_loc1.glb" },
-        home2: { type: "marker", patt: "marker-home2.patt", size: 1.2, file: "home_loc2.glb" },
-        home3: { type: "marker", patt: "marker-home3.patt", size: 1.2, file: "home_loc3.glb" },
-        home4: { type: "marker", patt: "marker-home4.patt", size: 1.2, file: "home_loc4.glb" },
+        home1: { type: "marker", patt: "marker-home1.patt", size: 2.5, mount: "wall", file: "home_loc1.glb" },
+        home2: { type: "marker", patt: "marker-home2.patt", size: 2.5, mount: "wall", file: "home_loc2.glb" },
+        home3: { type: "marker", patt: "marker-home3.patt", size: 2.5, mount: "wall", file: "home_loc3.glb" },
+        home4: { type: "marker", patt: "marker-home4.patt", size: 2.5, mount: "wall", file: "home_loc4.glb" },
 
         // --- בחוץ: מיקומי GPS קבועים. size = גודל במטרים.
-        reines:  { type: "gps", lat: 32.1485, lon: 34.8425, size: 3, file: "reines_36.glb" },
-        library: { type: "gps", lat: 32.1481, lon: 34.8398, size: 3, file: "alon_library.glb" },
-        heart:   { type: "gps", lat: 32.1478, lon: 34.8402, size: 3, file: "alon_heart.glb" },
-        ninja:   { type: "gps", lat: 32.1458, lon: 34.8340, size: 3, file: "park_ninja.glb" },
-        pasta:   { type: "gps", lat: 32.0743, lon: 34.7921, size: 3, file: "pasta_basta.glb" },
-        comedy:  { type: "gps", lat: 32.0751, lon: 34.7749, size: 3, rot: "90 0 0", file: "comedy_club.glb" }
+        // lift = הרמת המודל במטרים מעל הקרקע (למשל 4 = בערך בגובה קומה שנייה).
+        reines:  { type: "gps", lat: 32.135228, lon: 34.849159, size: 3, lift: 4, file: "reines_36.glb" },   // הרב ריינס 36
+        library: { type: "gps", lat: 32.148979, lon: 34.844971, size: 3, file: "alon_library.glb" },         // תיכון אלון - לדייק בשטח לספרייה
+        heart:   { type: "gps", lat: 32.148979, lon: 34.844971, size: 3, file: "alon_heart.glb" },           // תיכון אלון - לדייק בשטח ללב אלון
+        ninja:   { type: "gps", lat: 32.138826, lon: 34.845413, size: 3, file: "park_ninja.glb" },           // פארק רמת השרון - לדייק בשטח למתקני הנינג'ה
+        pasta:   { type: "gps", lat: 32.077488, lon: 34.793807, size: 3, file: "pasta_basta.glb" },          // פסטיטו מידטאון, מנחם בגין 144 (מול עזריאלי)
+        comedy:  { type: "gps", lat: 32.074486, lon: 34.782322, size: 3, rot: "90 0 0", file: "comedy_club.glb" } // קומדי בר, דניאל פריש 1
       };
 
       // ============================================================
@@ -327,7 +330,7 @@
       //   ?sim=32.1485,34.8425  - "לעמוד" בנקודת GPS מסוימת (בשלב בחוץ)
       //   &debug=1              - להציג מיקום ומרחקים בפינה
       // ============================================================
-      const GAME_VERSION = "4";
+      const GAME_VERSION = "9";
       const urlParams = new URLSearchParams(window.location.search);
       const SIM = (function () {
         const raw = urlParams.get("sim");
@@ -342,11 +345,15 @@
       // ============================================================
       const SAVE_KEY = "jerry-jeremy-progress";
 
+      // במצב בדיקה (?debug=1) שום דבר לא נשמר ולא נטען: כל מה שנאסף נעלם ברענון,
+      // וההתקדמות האמיתית של המשחק לא מושפעת.
       function saveProgress() {
+        if (DEBUG) return;
         try { localStorage.setItem(SAVE_KEY, JSON.stringify(foundList)); } catch (e) {}
       }
 
       function loadProgress() {
+        if (DEBUG) return;
         if (urlParams.has("reset")) {
           try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
           return;
@@ -477,7 +484,7 @@
           const fb = p.size / 2 / 0.4;
           el.setAttribute("scale", fb + " " + fb + " " + fb);
           // בברקוד: הכדור יושב על הברקוד ולא חצי בתוכו
-          if (p.type === "marker") el.setAttribute("position", "0 " + (p.size / 2) + " 0");
+          if (p.type === "marker" && p.mount === "floor") el.setAttribute("position", "0 " + (p.size / 2) + " 0");
         });
       }
 
@@ -524,17 +531,26 @@
         el.object3D.position.set(-center.x * s, -center.y * s, -center.z * s);
 
         if (p.type === "marker") {
-          // המודל "עומד" על הברקוד
+          // ברקוד על קיר: המודל ממורכז מול הברקוד (נקודת המיקום כבר הוזזה החוצה מהקיר)
+          if (p.mount !== "floor") return;
+          // ברקוד על שולחן/רצפה: המודל "עומד" על הברקוד
           el.object3D.position.y += size.y * s / 2;
         } else {
           // פריטי GPS בחוץ: מורידים את המודל כך שיעמוד על הקרקע (מתחת לגובה העיניים)
-          el.object3D.position.y += p.size / 2 - EYE_HEIGHT;
+          el.object3D.position.y += p.size / 2 - EYE_HEIGHT + (p.lift || 0);
         }
       }
 
       // ============================================================
       //  שלב הבית: ברקודים
       // ============================================================
+      // ברקוד על קיר: הציר "למעלה" של הברקוד יוצא מהקיר, לכן מסובבים את המודל ב-90 מעלות
+      // כך שיעמוד זקוף לאורך הקיר ויפנה אל החדר, ומזיזים אותו חצי מגודלו החוצה כדי שלא ייכנס לקיר.
+      function markerPlaceAttr(p) {
+        if (p.mount === "floor") return "";
+        return ' rotation="-90 0 0" position="0 ' + (p.size / 2 + 0.1) + ' 0"';
+      }
+
       function buildHomeScene() {
         let markers = "";
         idsOfType("marker").forEach(function (id) {
@@ -542,7 +558,7 @@
           markers +=
             '<a-marker id="marker-' + id + '" type="pattern" url="' + PLACES[id].patt + '"' +
             ' emitevents="true" smooth="true" smoothCount="8" smoothTolerance="0.01" smoothThreshold="5">' +
-            modelHtml(id, "") +
+            modelHtml(id, markerPlaceAttr(PLACES[id])) +
             '</a-marker>';
         });
 
@@ -655,7 +671,7 @@
             "line-height:1.6;max-width:70%;pointer-events:none;";
           document.body.appendChild(box);
         }
-        let lines = ["גרסה " + GAME_VERSION, "מצלמה: " + diag.camera, "מנוע זיהוי: " + diag.ar];
+        let lines = ["גרסה " + GAME_VERSION + (DEBUG ? " · מצב בדיקה - לא נשמר" : ""), "מצלמה: " + diag.camera, "מנוע זיהוי: " + diag.ar];
         for (let id in diag.files) {
           lines.push(HOME_NAMES[id] + ": קובץ " + diag.files[id] + (diag.seen[id] ? "  👁 מזוהה עכשיו" : ""));
         }
@@ -808,7 +824,7 @@
 
       function onUserPosition(lat, lon, accuracy) {
         tuneGpsStability(lat, lon);
-        let debugLines = ["lat " + lat.toFixed(5) + "  lon " + lon.toFixed(5) + "  ±" + Math.round(accuracy) + "m"];
+        let debugLines = ["מצב בדיקה - לא נשמר", "lat " + lat.toFixed(5) + "  lon " + lon.toFixed(5) + "  ±" + Math.round(accuracy) + "m"];
 
         idsOfType("gps").forEach(function (id) {
           const p = PLACES[id];
