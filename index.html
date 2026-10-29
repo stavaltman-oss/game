@@ -314,10 +314,11 @@
 
         // --- בחוץ: מיקומי GPS קבועים. size = גודל במטרים.
         // lift = הרמת המודל במטרים מעל הקרקע (למשל 4 = בערך בגובה קומה שנייה).
+        // radius = טווח איסוף במטרים לפריט הזה בלבד (בלי זה: COLLECT_RADIUS). שימושי בתוך מבנים, שם ה-GPS פחות מדויק.
         reines:  { type: "gps", lat: 32.135228, lon: 34.849159, size: 3, lift: 4, file: "reines_36.glb" },   // הרב ריינס 36
-        library: { type: "gps", lat: 32.148979, lon: 34.844971, size: 3, file: "alon_library.glb" },         // תיכון אלון - לדייק בשטח לספרייה
-        heart:   { type: "gps", lat: 32.148979, lon: 34.844971, size: 3, file: "alon_heart.glb" },           // תיכון אלון - לדייק בשטח ללב אלון
-        ninja:   { type: "gps", lat: 32.138826, lon: 34.845413, size: 3, file: "park_ninja.glb" },           // פארק רמת השרון - לדייק בשטח למתקני הנינג'ה
+        library: { type: "gps", lat: 32.14904, lon: 34.84466, size: 1.5, radius: 30, file: "alon_library.glb" }, // ספריית אלון - נמדד בשטח (בתוך מבנה)
+        heart:   { type: "gps", lat: 32.14918, lon: 34.84465, size: 1.5, radius: 30, file: "alon_heart.glb" },   // לב אלון - נמדד בשטח (בתוך מבנה)
+        ninja:   { type: "gps", lat: 32.13911, lon: 34.84646, size: 3, file: "park_ninja.glb" },             // מתקני הנינג'ה - נמדד בשטח
         pasta:   { type: "gps", lat: 32.077488, lon: 34.793807, size: 3, file: "pasta_basta.glb" },          // פסטיטו מידטאון, מנחם בגין 144 (מול עזריאלי)
         comedy:  { type: "gps", lat: 32.074486, lon: 34.782322, size: 3, rot: "90 0 0", file: "comedy_club.glb" } // קומדי בר, דניאל פריש 1
       };
@@ -330,7 +331,7 @@
       //   ?sim=32.1485,34.8425  - "לעמוד" בנקודת GPS מסוימת (בשלב בחוץ)
       //   &debug=1              - להציג מיקום ומרחקים בפינה
       // ============================================================
-      const GAME_VERSION = "9";
+      const GAME_VERSION = "14";
       const urlParams = new URLSearchParams(window.location.search);
       const SIM = (function () {
         const raw = urlParams.get("sim");
@@ -830,8 +831,8 @@
           const p = PLACES[id];
           const dist = calcDistance(lat, lon, p.lat, p.lon);
           debugLines.push(id + (foundList[id] ? " ✓ " : "   ") + Math.round(dist) + "m" +
-                          (dist < COLLECT_RADIUS && !foundList[id] ? "  בטווח" : ""));
-          inRange[id] = dist < COLLECT_RADIUS;
+                          (dist < (p.radius || COLLECT_RADIUS) && !foundList[id] ? "  בטווח" : ""));
+          inRange[id] = dist < (p.radius || COLLECT_RADIUS);
         });
 
         if (DEBUG) {
